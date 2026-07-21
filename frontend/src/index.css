@@ -1,6 +1,53 @@
 @import "tailwindcss";
 @import "tailwindcss/utilities";
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeInUp {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* Scrollbar oscura y limpia */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Fondo oscuro elegante */
+body {
+  background-color: #0b0f19; /* Un negro azulado muy profundo para que los colores contrasten por sí solos */
+  color: #f3f4f6;
+}
+
+/* Animaciones suaves */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-pulse-slow {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;
@@ -11,8 +58,7 @@
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -33,23 +79,37 @@
   }
 }
 
+/* MODO OSCURO: Sofisticado y nítido */
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
+    --text: #94a3b8; /* Gris pizarra claro, excelente legibilidad */
+    --text-h: #f8fafc; /* Blanco puro para títulos */
+    --bg: #0b0f19;
+    --border: #1e293b; /* Borde oscuro pero visible */
+    --code-bg: #1e293b;
     --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+    --accent-bg: rgba(192, 132, 252, 0.1);
+    --accent-border: rgba(192, 132, 252, 0.3);
+    --social-bg: rgba(30, 41, 59, 0.5);
+    --shadow: rgba(0, 0, 0, 0.5) 0 10px 20px -5px;
   }
 
   #social .button-icon {
     filter: invert(1) brightness(2);
+  }
+
+  /* --- EL TRUCO DE INTERACTIVIDAD SUTIL --- */
+  /* Aplica esto a los contenedores/tarjetas de tus métricas */
+  .metric-card, [class*="border"] {
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    background-color: #111827; /* Fondo de tarjeta en reposo */
+    border: 1px solid #1e293b !important;
+  }
+
+  /* Al pasar el ratón, el fondo se aclara sutilmente y el borde se ilumina sin usar sombras raras */
+  .metric-card:hover, [class*="border"]:hover {
+    background-color: #1f2937; /* Sube un tono el gris, se nota "vivo" inmediatamente */
+    border-color: #475569 !important; /* El borde se aclara para definir la tarjeta */
   }
 }
 
@@ -76,13 +136,13 @@ body {
   @apply flex flex-wrap items-center gap-2;
 }
 .action-cell .btn {
-  @apply px-3 py-1.5 rounded text-xs font-medium shadow-sm transition-colors;
+  @apply px-3 py-1.5 rounded text-xs font-medium transition-colors duration-150;
 }
 
 h1,
 h2 {
   font-family: var(--heading);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-h);
 }
 

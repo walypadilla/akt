@@ -1,24 +1,28 @@
-import axios from 'axios';
+// frontend/src/api/organizationDashboard.js
+import apiClient from './config';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+// Dashboard completo de la organización (con filtros)
+export const getOrganizationDashboard = async (periodo = 'mes', anio = null, mes = null) => {
+  const params = new URLSearchParams();
+  if (periodo) params.append('periodo', periodo);
+  if (anio) params.append('anio', anio);
+  if (mes) params.append('mes', mes);
+  const response = await apiClient.get(`/organization-dashboard?${params.toString()}`);
+  return response.data;
+};
 
+// Para compatibilidad con endpoints separados (si los usas)
 export const getOrganizationKPIs = async () => {
-  const response = await axios.get(`${API_URL}/organization-dashboard/kpis`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-  });
+  const response = await apiClient.get('/organization-dashboard/kpis');
   return response.data;
 };
 
-export const getMonthlyData = async () => {
-  const response = await axios.get(`${API_URL}/organization-dashboard/monthly`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-  });
+export const getOrganizationMonthlyData = async () => {
+  const response = await apiClient.get('/organization-dashboard/monthly');
   return response.data;
 };
 
-export const getTopClients = async () => {
-  const response = await axios.get(`${API_URL}/organization-dashboard/top-clients`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-  });
+export const getOrganizationTopClients = async () => {
+  const response = await apiClient.get('/organization-dashboard/top-clients');
   return response.data;
 };

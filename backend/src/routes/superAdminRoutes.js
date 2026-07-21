@@ -57,5 +57,6 @@ router.put('/configuracion', superAdminController.actualizarConfiguracionSaaS);
 // cancelacion de facturas 
 router.put('/facturas/:id/cancelar', superAdminController.cancelarFactura);
 router.delete('/gastos/:id', superAdminController.cancelarGasto);
+router.delete('/ingresos/:id', superAdminController.eliminarIngreso);
 
 module.exports = router;
