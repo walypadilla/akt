@@ -52,13 +52,15 @@ CREATE TABLE `aguinaldos` (
   `empleado_id` int NOT NULL,
   `anio` int NOT NULL,
   `monto` decimal(10,2) NOT NULL,
-  `pagado` tinyint(1) DEFAULT '0',
+  `estado` enum('Emitido','Pagado') DEFAULT 'Emitido',
   `fecha_pago` date DEFAULT NULL,
+  `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_empleado_anio` (`empleado_id`,`anio`),
-  KEY `organizacion_id` (`organizacion_id`),
-  CONSTRAINT `aguinaldos_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`),
-  CONSTRAINT `aguinaldos_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`)
+  KEY `idx_organizacion` (`organizacion_id`),
+  KEY `idx_empleado` (`empleado_id`),
+  KEY `idx_anio` (`anio`),
+  CONSTRAINT `aguinaldos_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `aguinaldos_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1162,14 +1164,18 @@ CREATE TABLE `vacaciones` (
   `id` int NOT NULL AUTO_INCREMENT,
   `organizacion_id` int NOT NULL,
   `empleado_id` int NOT NULL,
-  `fecha_inicio` date NOT NULL,
-  `fecha_fin` date NOT NULL,
-  `dias_tomados` decimal(4,1) NOT NULL,
+  `anio` int NOT NULL,
+  `dias` decimal(4,1) NOT NULL,
+  `monto` decimal(10,2) NOT NULL,
+  `estado` enum('Emitido','Pagado') DEFAULT 'Emitido',
+  `fecha_pago` date DEFAULT NULL,
+  `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_empleado_fechas` (`empleado_id`,`fecha_inicio`),
-  KEY `organizacion_id` (`organizacion_id`),
-  CONSTRAINT `vacaciones_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`),
-  CONSTRAINT `vacaciones_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`)
+  KEY `idx_organizacion` (`organizacion_id`),
+  KEY `idx_empleado` (`empleado_id`),
+  KEY `idx_anio` (`anio`),
+  CONSTRAINT `vacaciones_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `vacaciones_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1191,4 +1197,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-07-23 22:31:47
+-- Dump completed on 2026-07-23 23:02:32
