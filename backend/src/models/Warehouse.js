@@ -22,8 +22,7 @@ class Warehouse {
   static async create(data) {
     const { organizacion_id, nombre, direccion, responsable } = data;
     const [result] = await pool.query(
-      `INSERT INTO bodegas (organizacion_id, nombre, direccion, responsable)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO bodegas (organizacion_id, nombre, direccion, responsable) VALUES (?, ?, ?, ?)`,
       [organizacion_id, nombre, direccion, responsable]
     );
     return result.insertId;
@@ -32,8 +31,7 @@ class Warehouse {
   static async update(id, organizacion_id, data) {
     const { nombre, direccion, responsable } = data;
     const [result] = await pool.query(
-      `UPDATE bodegas SET nombre = ?, direccion = ?, responsable = ?
-       WHERE id = ? AND organizacion_id = ?`,
+      `UPDATE bodegas SET nombre = ?, direccion = ?, responsable = ? WHERE id = ? AND organizacion_id = ?`,
       [nombre, direccion, responsable, id, organizacion_id]
     );
     return result.affectedRows > 0;

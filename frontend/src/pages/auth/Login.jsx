@@ -23,7 +23,7 @@ const Login = () => {
       localStorage.setItem('user', JSON.stringify(data.usuario));
       login(data.usuario);
 
-      // ✅ Redirigir según el rol
+      // Redirigir según el rol
       if (data.usuario.rol === 'SUPER_ADMIN') {
         navigate('/dashboard');
       } else {

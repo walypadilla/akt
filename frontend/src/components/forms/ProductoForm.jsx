@@ -1,391 +1,402 @@
 // frontend/src/components/forms/ProductoForm.jsx
 import React, { useState, useEffect } from 'react';
-import { getCategorias, getMarcas } from '../../api/inventory'; // ✅ CORREGIDO: getCategorias, getMarcas
-import { getEtiquetas, asignarEtiquetaAProducto, eliminarEtiquetaDeProducto } from '../../api/tags';
 import { X } from 'lucide-react';
+import { createProducto, updateProducto, createCategoria, createMarca } from '../../api/inventory';
+import { toast } from 'react-toastify';
 
-const ProductoForm = ({ initialData = {}, onSubmit, onCancel, loading }) => {
+const ProductoForm = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  producto = null,
+  categorias = [],
+  marcas = [],
+  onCategoriaCreated,
+  onMarcaCreated,
+}) => {
   const [formData, setFormData] = useState({
-    nombre: initialData.nombre || '',
-    descripcion: initialData.descripcion || '',
-    precio_unitario: initialData.precio_unitario || '',
-    costo_unitario: initialData.costo_unitario || '',
-    costo_promedio: initialData.costo_promedio || '',
-    stock_actual: initialData.stock_actual || 0,
-    stock_minimo: initialData.stock_minimo || 0,
-    stock_maximo: initialData.stock_maximo || 0,
-    ubicacion: initialData.ubicacion || '',
-    tipo: initialData.tipo || 'Producto',
-    unidad_medida: initialData.unidad_medida || 'Unidad',
-    codigo_barras: initialData.codigo_barras || '',
-    codigo_sku: initialData.codigo_sku || '',
-    peso: initialData.peso || '',
-    dimensiones: initialData.dimensiones || '',
-    imagen_url: initialData.imagen_url || '',
-    categoria_id: initialData.categoria_id || '',
-    marca_id: initialData.marca_id || '',
-    es_kit: initialData.es_kit || false,
-    activo: initialData.activo !== undefined ? initialData.activo : true,
+    nombre: '',
+    descripcion: '',
+    codigo_sku: '',
+    codigo_barras: '',
+    tipo: 'Producto',
+    precio_unitario: '',
+    costo_promedio: '',
+    stock_actual: 0,
+    stock_minimo: 0,
+    categoria_id: '',
+    marca_id: '',
   });
+  const [loading, setLoading] = useState(false);
+  const [nuevaCategoria, setNuevaCategoria] = useState('');
+  const [nuevaMarca, setNuevaMarca] = useState('');
+  const [showCategoriaInput, setShowCategoriaInput] = useState(false);
+  const [showMarcaInput, setShowMarcaInput] = useState(false);
+  const [categoriasLocal, setCategoriasLocal] = useState(categorias);
+  const [marcasLocal, setMarcasLocal] = useState(marcas);
 
-  const [categorias, setCategorias] = useState([]);
-  const [marcas, setMarcas] = useState([]);
-  const [etiquetas, setEtiquetas] = useState([]);
-  const [etiquetasSeleccionadas, setEtiquetasSeleccionadas] = useState(
-    initialData.etiquetas ? initialData.etiquetas.split(',').filter(Boolean) : []
-  );
-  const [nuevaEtiqueta, setNuevaEtiqueta] = useState('');
-  const [errors, setErrors] = useState({});
+  // Actualizar listas locales cuando cambian las props
+  useEffect(() => {
+    setCategoriasLocal(categorias);
+    setMarcasLocal(marcas);
+  }, [categorias, marcas]);
+
+  // Generar SKU automático
+  const generarSKU = (nombre, categoriaId) => {
+    if (!nombre) return '';
+    const cat = categoriasLocal.find(c => c.id === parseInt(categoriaId));
+    const prefix = cat ? cat.nombre.slice(0, 3).toUpperCase() : 'PRD';
+    const namePart = nombre.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase();
+    const randomLetter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    const randomNum = String(Math.floor(1000 + Math.random() * 9000));
+    return `${prefix}${namePart}${randomLetter}${randomNum}`;
+  };
 
   useEffect(() => {
-    const loadCatalogos = async () => {
-      try {
-        const [cats, marcasData, etiqs] = await Promise.all([
-          getCategorias(),
-          getMarcas(),
-          getEtiquetas(),
-        ]);
-        setCategorias(cats || []);
-        setMarcas(marcasData || []);
-        setEtiquetas(etiqs || []);
-      } catch (error) {
-        console.error('Error cargando catálogos:', error);
-      }
-    };
-    loadCatalogos();
-  }, []);
+    if (producto) {
+      setFormData({
+        nombre: producto.nombre || '',
+        descripcion: producto.descripcion || '',
+        codigo_sku: producto.codigo_sku || '',
+        codigo_barras: producto.codigo_barras || '',
+        tipo: producto.tipo || 'Producto',
+        precio_unitario: producto.precio_unitario || '',
+        costo_promedio: producto.costo_promedio || '',
+        stock_actual: producto.stock_actual || 0,
+        stock_minimo: producto.stock_minimo || 0,
+        categoria_id: producto.categoria_id || '',
+        marca_id: producto.marca_id || '',
+      });
+    } else {
+      setFormData({
+        nombre: '',
+        descripcion: '',
+        codigo_sku: '',
+        codigo_barras: '',
+        tipo: 'Producto',
+        precio_unitario: '',
+        costo_promedio: '',
+        stock_actual: 0,
+        stock_minimo: 0,
+        categoria_id: '',
+        marca_id: '',
+      });
+    }
+  }, [producto]);
 
-  const validate = () => {
-    const newErrors = {};
-    if (!formData.nombre.trim()) newErrors.nombre = 'Requerido';
-    if (!formData.precio_unitario || parseFloat(formData.precio_unitario) <= 0)
-      newErrors.precio_unitario = 'Debe ser mayor a 0';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  // Cuando cambia el nombre o la categoría, actualizar SKU automático
+  useEffect(() => {
+    if (!producto && formData.nombre && formData.categoria_id) {
+      const nuevoSku = generarSKU(formData.nombre, formData.categoria_id);
+      setFormData(prev => ({ ...prev, codigo_sku: nuevoSku }));
+    }
+  }, [formData.nombre, formData.categoria_id, producto]);
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    const val = type === 'checkbox' ? checked : value;
-    setFormData({ ...formData, [name]: val });
-    if (errors[name]) setErrors({ ...errors, [name]: '' });
+    const { name, value, type } = e.target;
+    let val = value;
+    if (type === 'number') {
+      val = parseFloat(value);
+      if (val < 0) return;
+    }
+    setFormData(prev => ({ ...prev, [name]: val }));
   };
 
-  const handleSubmit = (e) => {
+  const handleCreateCategoria = async () => {
+    if (!nuevaCategoria.trim()) return;
+    try {
+      const result = await createCategoria({ nombre: nuevaCategoria.trim() });
+      const newCat = { id: result.id, nombre: nuevaCategoria.trim() };
+      setCategoriasLocal([...categoriasLocal, newCat]);
+      setFormData(prev => ({ ...prev, categoria_id: result.id }));
+      if (onCategoriaCreated) onCategoriaCreated(newCat);
+      toast.success('Categoría creada');
+      setNuevaCategoria('');
+      setShowCategoriaInput(false);
+    } catch (err) {
+      toast.error('Error al crear categoría');
+    }
+  };
+
+  const handleCreateMarca = async () => {
+    if (!nuevaMarca.trim()) return;
+    try {
+      const result = await createMarca({ nombre: nuevaMarca.trim() });
+      const newMarca = { id: result.id, nombre: nuevaMarca.trim() };
+      setMarcasLocal([...marcasLocal, newMarca]);
+      setFormData(prev => ({ ...prev, marca_id: result.id }));
+      if (onMarcaCreated) onMarcaCreated(newMarca);
+      toast.success('Marca creada');
+      setNuevaMarca('');
+      setShowMarcaInput(false);
+    } catch (err) {
+      toast.error('Error al crear marca');
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (validate()) {
-      onSubmit({ ...formData, etiquetas: etiquetasSeleccionadas.join(',') });
+    setLoading(true);
+    try {
+      const payload = { ...formData };
+      payload.precio_unitario = parseFloat(payload.precio_unitario) || 0;
+      payload.costo_promedio = parseFloat(payload.costo_promedio) || 0;
+      payload.stock_actual = parseInt(payload.stock_actual) || 0;
+      payload.stock_minimo = parseInt(payload.stock_minimo) || 0;
+
+      if (producto) {
+        await updateProducto(producto.id, payload);
+        toast.success('Producto actualizado');
+      } else {
+        await createProducto(payload);
+        toast.success('Producto creado');
+      }
+      onSuccess();
+      onClose();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error al guardar');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const agregarEtiqueta = () => {
-    if (nuevaEtiqueta.trim() && !etiquetasSeleccionadas.includes(nuevaEtiqueta.trim())) {
-      setEtiquetasSeleccionadas([...etiquetasSeleccionadas, nuevaEtiqueta.trim()]);
-      setNuevaEtiqueta('');
-    }
-  };
+  if (!isOpen) return null;
 
-  const eliminarEtiqueta = (tag) => {
-    setEtiquetasSeleccionadas(etiquetasSeleccionadas.filter(t => t !== tag));
-  };
+  const esServicio = formData.tipo === 'Servicio';
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Nombre */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-300 mb-1">Nombre *</label>
-          <input
-            type="text"
-            name="nombre"
-            value={formData.nombre}
-            onChange={handleChange}
-            className={`w-full px-3 py-2 bg-gray-700 border ${errors.nombre ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500`}
-          />
-          {errors.nombre && <p className="text-red-400 text-xs mt-1">{errors.nombre}</p>}
-        </div>
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-300 mb-1">Descripción</label>
-          <textarea
-            name="descripcion"
-            value={formData.descripcion}
-            onChange={handleChange}
-            rows={2}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold text-white">
+            {producto ? 'Editar Producto' : 'Nuevo Producto'}
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <X size={24} />
+          </button>
         </div>
 
-        {/* Precios y Costos */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Precio Unitario *</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            name="precio_unitario"
-            value={formData.precio_unitario}
-            onChange={handleChange}
-            className={`w-full px-3 py-2 bg-gray-700 border ${errors.precio_unitario ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500`}
-          />
-          {errors.precio_unitario && <p className="text-red-400 text-xs mt-1">{errors.precio_unitario}</p>}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Costo Unitario</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            name="costo_unitario"
-            value={formData.costo_unitario}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Costo Promedio</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            name="costo_promedio"
-            value={formData.costo_promedio}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Unidad de Medida</label>
-          <input
-            type="text"
-            name="unidad_medida"
-            value={formData.unidad_medida}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-
-        {/* Stock */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Stock Actual</label>
-          <input
-            type="number"
-            step="1"
-            min="0"
-            name="stock_actual"
-            value={formData.stock_actual}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Stock Mínimo</label>
-          <input
-            type="number"
-            step="1"
-            min="0"
-            name="stock_minimo"
-            value={formData.stock_minimo}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Stock Máximo</label>
-          <input
-            type="number"
-            step="1"
-            min="0"
-            name="stock_maximo"
-            value={formData.stock_maximo}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Ubicación</label>
-          <input
-            type="text"
-            name="ubicacion"
-            value={formData.ubicacion}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-
-        {/* Códigos */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Código SKU</label>
-          <input
-            type="text"
-            name="codigo_sku"
-            value={formData.codigo_sku}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Código de Barras</label>
-          <input
-            type="text"
-            name="codigo_barras"
-            value={formData.codigo_barras}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-
-        {/* Atributos físicos */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Peso (kg)</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            name="peso"
-            value={formData.peso}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Dimensiones (LxAnxAl)</label>
-          <input
-            type="text"
-            name="dimensiones"
-            value={formData.dimensiones}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-
-        {/* Categoría, Marca, Tipo */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Categoría</label>
-          <select
-            name="categoria_id"
-            value={formData.categoria_id}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="">Sin categoría</option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>{c.nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Marca</label>
-          <select
-            name="marca_id"
-            value={formData.marca_id}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="">Sin marca</option>
-            {marcas.map((m) => (
-              <option key={m.id} value={m.id}>{m.nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Tipo</label>
-          <select
-            name="tipo"
-            value={formData.tipo}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="Producto">Producto</option>
-            <option value="Servicio">Servicio</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Es Kit</label>
-          <select
-            name="es_kit"
-            value={formData.es_kit}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value={false}>No</option>
-            <option value={true}>Sí</option>
-          </select>
-        </div>
-
-        {/* Imagen URL */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-300 mb-1">URL de Imagen</label>
-          <input
-            type="text"
-            name="imagen_url"
-            value={formData.imagen_url}
-            onChange={handleChange}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            placeholder="https://ejemplo.com/imagen.jpg"
-          />
-        </div>
-
-        {/* Estado Activo */}
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="activo"
-            checked={formData.activo}
-            onChange={handleChange}
-            className="w-4 h-4 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
-          />
-          <label className="text-sm text-gray-300">Activo</label>
-        </div>
-
-        {/* Etiquetas */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-300 mb-1">Etiquetas</label>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {etiquetasSeleccionadas.map((tag) => (
-              <span key={tag} className="bg-purple-600/30 text-purple-300 px-2 py-1 rounded-full text-xs flex items-center gap-1">
-                {tag}
-                <button type="button" onClick={() => eliminarEtiqueta(tag)} className="hover:text-white">
-                  <X size={12} />
-                </button>
-              </span>
-            ))}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-sm text-gray-300 block mb-1">Tipo *</label>
+            <select
+              name="tipo"
+              value={formData.tipo}
+              onChange={handleChange}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              required
+            >
+              <option value="Producto">Producto</option>
+              <option value="Servicio">Servicio</option>
+            </select>
           </div>
-          <div className="flex gap-2">
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-gray-300 block mb-1">Nombre *</label>
+              <input
+                type="text"
+                name="nombre"
+                value={formData.nombre}
+                onChange={handleChange}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-300 block mb-1">SKU</label>
+              <input
+                type="text"
+                name="codigo_sku"
+                value={formData.codigo_sku}
+                onChange={handleChange}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="Automático"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-300 block mb-1">Código de Barras</label>
             <input
               type="text"
-              value={nuevaEtiqueta}
-              onChange={(e) => setNuevaEtiqueta(e.target.value)}
-              placeholder="Escribir etiqueta y presionar +"
-              className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              name="codigo_barras"
+              value={formData.codigo_barras}
+              onChange={handleChange}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="Opcional"
             />
-            <button type="button" onClick={agregarEtiqueta} className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-white">
-              +
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-300 block mb-1">Descripción</label>
+            <textarea
+              name="descripcion"
+              value={formData.descripcion}
+              onChange={handleChange}
+              rows="2"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-gray-300 block mb-1">Precio Unitario *</label>
+              <input
+                type="number"
+                name="precio_unitario"
+                step="0.01"
+                min="0"
+                value={formData.precio_unitario}
+                onChange={handleChange}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                required
+              />
+            </div>
+            {!esServicio && (
+              <div>
+                <label className="text-sm text-gray-300 block mb-1">Costo Promedio</label>
+                <input
+                  type="number"
+                  name="costo_promedio"
+                  step="0.01"
+                  min="0"
+                  value={formData.costo_promedio}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            )}
+          </div>
+
+          {!esServicio && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm text-gray-300 block mb-1">Stock Actual</label>
+                <input
+                  type="number"
+                  name="stock_actual"
+                  min="0"
+                  step="1"
+                  value={formData.stock_actual}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-300 block mb-1">Stock Mínimo</label>
+                <input
+                  type="number"
+                  name="stock_minimo"
+                  min="0"
+                  step="1"
+                  value={formData.stock_minimo}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="text-sm text-gray-300 block mb-1">Categoría</label>
+            <div className="flex gap-2">
+              <select
+                name="categoria_id"
+                value={formData.categoria_id}
+                onChange={handleChange}
+                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">Sin categoría</option>
+                {categoriasLocal.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowCategoriaInput(!showCategoriaInput)}
+                className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-white text-sm"
+              >
+                + Nueva
+              </button>
+            </div>
+            {showCategoriaInput && (
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={nuevaCategoria}
+                  onChange={(e) => setNuevaCategoria(e.target.value)}
+                  placeholder="Nombre de categoría"
+                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateCategoria}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white text-sm"
+                >
+                  Guardar
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-300 block mb-1">Marca</label>
+            <div className="flex gap-2">
+              <select
+                name="marca_id"
+                value={formData.marca_id}
+                onChange={handleChange}
+                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">Sin marca</option>
+                {marcasLocal.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowMarcaInput(!showMarcaInput)}
+                className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-white text-sm"
+              >
+                + Nueva
+              </button>
+            </div>
+            {showMarcaInput && (
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={nuevaMarca}
+                  onChange={(e) => setNuevaMarca(e.target.value)}
+                  placeholder="Nombre de marca"
+                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateMarca}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white text-sm"
+                >
+                  Guardar
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-white transition"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition disabled:opacity-50"
+            >
+              {loading ? 'Guardando...' : producto ? 'Actualizar' : 'Crear'}
             </button>
           </div>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {etiquetas.filter(e => !etiquetasSeleccionadas.includes(e.nombre)).map((e) => (
-              <button
-                key={e.id}
-                type="button"
-                onClick={() => setEtiquetasSeleccionadas([...etiquetasSeleccionadas, e.nombre])}
-                className="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300"
-              >
-                {e.nombre}
-              </button>
-            ))}
-          </div>
-        </div>
+        </form>
       </div>
-
-      <div className="flex justify-end space-x-3 pt-4">
-        <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition">
-          Cancelar
-        </button>
-        <button type="submit" disabled={loading} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50">
-          {loading ? 'Guardando...' : 'Guardar'}
-        </button>
-      </div>
-    </form>
+    </div>
   );
 };
 

@@ -1,4 +1,3 @@
-// backend/src/controllers/inventoryController.js
 const Producto = require('../models/Producto');
 const Warehouse = require('../models/Warehouse');
 const InventoryMovement = require('../models/InventoryMovement');
@@ -8,9 +7,6 @@ const { pool } = require('../config/db');
 // FUNCIONES AUXILIARES (reutilizables)
 // ============================================================
 
-/**
- * Obtiene productos con filtros y paginación (usado internamente)
- */
 async function getProductosConFiltros(organizacion_id, filters = {}) {
   const {
     search = '',
@@ -20,8 +16,9 @@ async function getProductosConFiltros(organizacion_id, filters = {}) {
     categoria_id = '',
     marca_id = '',
     etiqueta_id = '',
+    incluir_desactivados = false,
     page = 1,
-    limit = 20,
+    limit = 12,
   } = filters;
 
   const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -37,9 +34,13 @@ async function getProductosConFiltros(organizacion_id, filters = {}) {
     LEFT JOIN movimientos_inventario m ON p.id = m.producto_id
     LEFT JOIN categorias c ON p.categoria_id = c.id
     LEFT JOIN marcas mar ON p.marca_id = mar.id
-    WHERE p.organizacion_id = ? AND p.activo = 1
+    WHERE p.organizacion_id = ?
   `;
   const params = [organizacion_id];
+
+  if (!incluir_desactivados) {
+    sql += ` AND p.activo = 1`;
+  }
 
   if (search) {
     sql += ` AND (p.nombre LIKE ? OR p.codigo_sku LIKE ? OR p.codigo_barras LIKE ?)`;
@@ -81,7 +82,6 @@ async function getProductosConFiltros(organizacion_id, filters = {}) {
 
   const [rows] = await pool.query(sql, params);
 
-  // Contar total
   let countSql = `
     SELECT COUNT(DISTINCT p.id) AS total
     FROM productos p
@@ -152,7 +152,6 @@ exports.getInventoryDashboard = async (req, res) => {
     const anioSeleccionado = anio ? parseInt(anio) : añoActual;
     const mesSeleccionado = mes ? parseInt(mes) : mesActual;
 
-    // 1. Capital inmovilizado
     const [capitalResult] = await pool.query(
       `SELECT COALESCE(SUM(stock_actual * costo_promedio), 0) AS total
        FROM productos
@@ -161,7 +160,6 @@ exports.getInventoryDashboard = async (req, res) => {
     );
     const capitalInmovilizado = parseFloat(capitalResult[0]?.total) || 0;
 
-    // 2. Alertas de stock
     const [bajoStock] = await pool.query(
       `SELECT COUNT(*) AS total FROM productos 
        WHERE organizacion_id = ? AND activo = 1 AND stock_actual <= stock_minimo AND stock_actual > 0`,
@@ -185,13 +183,11 @@ exports.getInventoryDashboard = async (req, res) => {
       [organizacion_id]
     );
 
-    // 3. Total de productos activos
     const [totalProductos] = await pool.query(
       'SELECT COUNT(*) AS total FROM productos WHERE organizacion_id = ? AND activo = 1',
       [organizacion_id]
     );
 
-    // 4. Movimientos del periodo
     let fechaInicio;
     let fechaFin = new Date(anioSeleccionado, mesSeleccionado - 1, 1);
     switch (periodo) {
@@ -205,7 +201,7 @@ exports.getInventoryDashboard = async (req, res) => {
         break;
       case 'anual':
         fechaInicio = new Date(anioSeleccionado, 0, 1);
-        fechaFin = new Date(anioSeleccionado, 11, 31);
+        fechaFin = new Date(anioSeleccionado, 11, 31, 23, 59, 59);
         break;
       default:
         fechaInicio = new Date(anioSeleccionado, mesSeleccionado - 1 - 6, 1);
@@ -229,37 +225,19 @@ exports.getInventoryDashboard = async (req, res) => {
     );
     const totalSalidas = parseFloat(salidas[0]?.total) || 0;
 
-    // 5. Datos para gráficas
-    let datosMensuales = [];
-    let datosDiarios = [];
+    let fechaInicioAnual = new Date(anioSeleccionado, 0, 1);
+    let fechaFinAnual = new Date(anioSeleccionado, 11, 31, 23, 59, 59);
+    const [movMensuales] = await pool.query(
+      `SELECT DATE_FORMAT(created_at, '%Y-%m') AS mes,
+              SUM(CASE WHEN tipo_movimiento = 'Entrada' THEN cantidad ELSE 0 END) AS entradas,
+              SUM(CASE WHEN tipo_movimiento = 'Salida' THEN cantidad ELSE 0 END) AS salidas
+       FROM movimientos_inventario
+       WHERE organizacion_id = ? AND created_at >= ? AND created_at <= ?
+       GROUP BY mes
+       ORDER BY mes ASC`,
+      [organizacion_id, fechaInicioAnual, fechaFinAnual]
+    );
 
-    if (periodo === 'mes') {
-      const [movDiarios] = await pool.query(
-        `SELECT DAY(created_at) AS dia,
-                SUM(CASE WHEN tipo_movimiento = 'Entrada' THEN cantidad ELSE 0 END) AS entradas,
-                SUM(CASE WHEN tipo_movimiento = 'Salida' THEN cantidad ELSE 0 END) AS salidas
-         FROM movimientos_inventario
-         WHERE organizacion_id = ? AND created_at >= ? AND created_at <= ?
-         GROUP BY dia
-         ORDER BY dia ASC`,
-        [organizacion_id, fechaInicio, fechaFin]
-      );
-      datosDiarios = movDiarios;
-    } else {
-      const [movMensuales] = await pool.query(
-        `SELECT DATE_FORMAT(created_at, '%Y-%m') AS mes,
-                SUM(CASE WHEN tipo_movimiento = 'Entrada' THEN cantidad ELSE 0 END) AS entradas,
-                SUM(CASE WHEN tipo_movimiento = 'Salida' THEN cantidad ELSE 0 END) AS salidas
-         FROM movimientos_inventario
-         WHERE organizacion_id = ? AND created_at >= ? AND created_at <= ?
-         GROUP BY mes
-         ORDER BY mes ASC`,
-        [organizacion_id, fechaInicio, fechaFin]
-      );
-      datosMensuales = movMensuales;
-    }
-
-    // 6. Top 5 productos por rotación
     const [topProductos] = await pool.query(
       `SELECT p.id, p.nombre, p.stock_actual,
               COALESCE(SUM(df.cantidad), 0) AS total_vendido,
@@ -273,19 +251,19 @@ exports.getInventoryDashboard = async (req, res) => {
        GROUP BY p.id, p.nombre, p.stock_actual
        ORDER BY total_vendido DESC
        LIMIT 5`,
-      [organizacion_id, fechaInicio]
+      [organizacion_id, fechaInicioAnual]
     );
 
-    // 7. Movimientos recientes
     const [movimientosRecientes] = await pool.query(
       `SELECT m.*, p.nombre AS producto_nombre, b.nombre AS bodega_nombre
        FROM movimientos_inventario m
        JOIN productos p ON m.producto_id = p.id
        LEFT JOIN bodegas b ON m.bodega_id = b.id
-       WHERE m.organizacion_id = ?
+       WHERE m.organizacion_id = ? 
+         AND m.created_at >= ? AND m.created_at <= ?
        ORDER BY m.created_at DESC
        LIMIT 20`,
-      [organizacion_id]
+      [organizacion_id, fechaInicioAnual, fechaFinAnual]
     );
 
     res.json({
@@ -301,8 +279,7 @@ exports.getInventoryDashboard = async (req, res) => {
         bajoStock: bajoStockDetalle,
         agotados: agotadosDetalle,
       },
-      datosMensuales,
-      datosDiarios,
+      datosMensuales: movMensuales,
       topProductos,
       movimientosRecientes,
       periodo: {
@@ -323,8 +300,16 @@ exports.getInventoryDashboard = async (req, res) => {
 exports.getProductos = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
-    const { search, tipo, estado_stock, bodega_id, categoria_id, marca_id, etiqueta_id, page = 1, limit = 20 } = req.query;
-    const result = await getProductosConFiltros(organizacion_id, { search, tipo, estado_stock, bodega_id, categoria_id, marca_id, etiqueta_id, page, limit });
+    const { 
+      search, tipo, estado_stock, bodega_id, categoria_id, marca_id, etiqueta_id, 
+      incluir_desactivados, 
+      page = 1, limit = 12 
+    } = req.query;
+    const result = await getProductosConFiltros(organizacion_id, { 
+      search, tipo, estado_stock, bodega_id, categoria_id, marca_id, etiqueta_id,
+      incluir_desactivados: incluir_desactivados === 'true',
+      page, limit 
+    });
     res.json(result);
   } catch (error) {
     console.error('❌ [getProductos] Error:', error);
@@ -455,73 +440,98 @@ exports.getKardex = async (req, res) => {
 
 exports.createAjuste = async (req, res) => {
   const connection = await pool.getConnection();
+
   try {
     await connection.beginTransaction();
+
     const organizacion_id = req.organizacion_id;
-    const usuario_id = req.usuario_id;
-    const { producto_id, bodega_id, tipo_ajuste, cantidad, motivo, descripcion } = req.body;
+    const usuario_id = req.usuario_id || req.user?.id;
 
-    if (!producto_id || !tipo_ajuste || !cantidad || cantidad <= 0 || !motivo) {
-      return res.status(400).json({ message: 'Faltan campos obligatorios' });
-    }
+    const {
+      producto_id,
+      bodega_id = null,
+      tipo_ajuste,
+      cantidad,
+      motivo,
+      descripcion = null,
+      costo_unitario = 0
+    } = req.body;
 
-    const [producto] = await connection.query(
-      'SELECT stock_actual, costo_promedio FROM productos WHERE id = ? AND organizacion_id = ?',
-      [producto_id, organizacion_id]
-    );
-    if (producto.length === 0) {
+    if (!producto_id || !tipo_ajuste || !cantidad) {
       await connection.rollback();
-      return res.status(404).json({ message: 'Producto no encontrado' });
+      return res.status(400).json({
+        message: 'Los campos producto_id, tipo_ajuste y cantidad son obligatorios.'
+      });
     }
 
-    const stockAnterior = parseFloat(producto[0].stock_actual);
-    const costoUnitario = parseFloat(producto[0].costo_promedio);
-    let stockNuevo = stockAnterior;
+    const motivosValidosENUM = {
+      'merma': 'Merma',
+      'vencimiento': 'Vencimiento',
+      'robo': 'Robo',
+      'devolucion': 'Devolucion_Proveedor',
+      'devolucion_proveedor': 'Devolucion_Proveedor',
+      'devolucion de cliente': 'Otro',
+      'inventario_inicial': 'Inventario_Inicial',
+      'inventario inicial': 'Inventario_Inicial',
+      'ajuste manual': 'Otro',
+      'otro': 'Otro'
+    };
 
-    if (tipo_ajuste === 'Entrada') {
-      stockNuevo += parseFloat(cantidad);
-    } else if (tipo_ajuste === 'Salida') {
-      if (stockAnterior < cantidad) {
-        await connection.rollback();
-        return res.status(400).json({ message: 'Stock insuficiente para realizar el ajuste' });
-      }
-      stockNuevo -= parseFloat(cantidad);
-    } else {
-      await connection.rollback();
-      return res.status(400).json({ message: 'Tipo de ajuste inválido' });
-    }
+    const motivoKey = (motivo || '').toLowerCase().trim();
+    const motivoFinal = motivosValidosENUM[motivoKey] || 'Otro';
 
-    await connection.query(
-      'UPDATE productos SET stock_actual = ? WHERE id = ? AND organizacion_id = ?',
-      [stockNuevo, producto_id, organizacion_id]
-    );
+    const tipoAjusteFinal = tipo_ajuste.toLowerCase() === 'entrada' ? 'Entrada' : 'Salida';
+    const cantidadNum = parseFloat(cantidad);
 
-    await connection.query(
-      `INSERT INTO ajustes_inventario 
-       (organizacion_id, producto_id, bodega_id, tipo_ajuste, cantidad, motivo, descripcion, costo_unitario, usuario_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [organizacion_id, producto_id, bodega_id || null, tipo_ajuste, cantidad, motivo, descripcion || '', costoUnitario, usuario_id]
-    );
+    const sqlInsert = `
+      INSERT INTO ajustes_inventario 
+        (organizacion_id, producto_id, bodega_id, tipo_ajuste, cantidad, motivo, descripcion, costo_unitario, usuario_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
 
-    await connection.query(
-      `INSERT INTO movimientos_inventario 
-       (organizacion_id, producto_id, bodega_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo,
-        referencia_tipo, referencia_id, costo_unitario, observacion, usuario_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [organizacion_id, producto_id, bodega_id || null, 'Ajuste', cantidad, stockAnterior, stockNuevo,
-       'Ajuste', 0, costoUnitario, descripcion || '', usuario_id]
-    );
+    const [resultInsert] = await connection.query(sqlInsert, [
+      organizacion_id,
+      producto_id,
+      bodega_id || null,
+      tipoAjusteFinal,
+      cantidadNum,
+      motivoFinal,
+      descripcion,
+      parseFloat(costo_unitario) || 0,
+      usuario_id
+    ]);
+
+    const operador = tipoAjusteFinal === 'Entrada' ? '+' : '-';
+    const sqlUpdateStock = `
+      UPDATE productos 
+      SET stock_actual = stock_actual ${operador} ? 
+      WHERE id = ? AND organizacion_id = ?
+    `;
+
+    await connection.query(sqlUpdateStock, [cantidadNum, producto_id, organizacion_id]);
 
     await connection.commit();
-    res.status(201).json({ message: 'Ajuste de inventario realizado', stock_nuevo: stockNuevo });
+
+    return res.status(201).json({
+      message: 'Ajuste de inventario registrado correctamente',
+      ajuste_id: resultInsert.insertId
+    });
+
   } catch (error) {
     await connection.rollback();
     console.error('❌ [createAjuste] Error:', error);
-    res.status(500).json({ message: 'Error al crear ajuste', error: error.message });
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        message: 'Error al registrar el ajuste de inventario',
+        error: error.message
+      });
+    }
   } finally {
     connection.release();
   }
 };
+
 
 exports.getAjustes = async (req, res) => {
   try {
@@ -731,51 +741,190 @@ exports.exportarReporte = async (req, res) => {
     let data = [];
     let filename = '';
 
-    // Validar fechas para kardex
-    if (tipo === 'kardex') {
-      if (!producto_id) {
-        return res.status(400).json({ message: 'producto_id es obligatorio para Kardex' });
+    const validarFechas = (inicio, fin) => {
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      const dInicio = new Date(inicio);
+      const dFin = new Date(fin);
+      if (isNaN(dInicio) || isNaN(dFin)) {
+        throw new Error('Formato de fecha inválido');
       }
+      if (dInicio > dFin) {
+        throw new Error('La fecha de inicio no puede ser mayor a la fecha final');
+      }
+      if (dInicio > hoy) {
+        throw new Error('La fecha de inicio no puede ser mayor a la fecha actual');
+      }
+      if (dFin > hoy) {
+        throw new Error('La fecha final no puede ser mayor a la fecha actual');
+      }
+    };
+
+    // ========== KARDEX ==========
+    if (tipo === 'kardex') {
       let inicio = fecha_inicio || new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString().split('T')[0];
       let fin = fecha_fin || new Date().toISOString().split('T')[0];
-      if (new Date(inicio) > new Date(fin)) {
-        return res.status(400).json({ message: 'La fecha de inicio no puede ser mayor a la fecha final' });
+      validarFechas(inicio, fin);
+
+      let sql = `
+        SELECT 
+          m.id,
+          m.created_at AS fecha,
+          m.referencia_tipo AS documento,
+          m.tipo_movimiento AS tipo,
+          m.cantidad,
+          m.stock_anterior,
+          m.stock_nuevo,
+          p.nombre AS producto_nombre,
+          p.codigo_sku AS sku,
+          b.nombre AS bodega_nombre
+        FROM movimientos_inventario m
+        JOIN productos p ON m.producto_id = p.id
+        LEFT JOIN bodegas b ON m.bodega_id = b.id
+        WHERE m.organizacion_id = ?
+          AND m.created_at BETWEEN ? AND ?
+      `;
+      const params = [organizacion_id, `${inicio} 00:00:00`, `${fin} 23:59:59`];
+
+      if (producto_id) {
+        sql += ' AND m.producto_id = ?';
+        params.push(producto_id);
       }
-      const movimientos = await InventoryMovement.getKardex(
-        producto_id,
-        organizacion_id,
-        `${inicio} 00:00:00`,
-        `${fin} 23:59:59`
-      );
-      let saldo = 0;
-      data = movimientos.map(m => {
-        if (m.tipo_movimiento === 'Entrada') saldo += parseFloat(m.cantidad);
-        else saldo -= parseFloat(m.cantidad);
+
+      sql += ' ORDER BY m.created_at ASC, m.id ASC';
+
+      const [rows] = await pool.query(sql, params);
+
+      const saldos = {};
+      data = rows.map(row => {
+        const key = row.producto_nombre + row.sku;
+        if (!saldos[key]) saldos[key] = 0;
+        const saldoActual = saldos[key];
+        let nuevoSaldo = saldoActual;
+        if (row.tipo === 'Entrada') nuevoSaldo += parseFloat(row.cantidad);
+        else if (row.tipo === 'Salida' || row.tipo === 'Ajuste') nuevoSaldo -= parseFloat(row.cantidad);
+        saldos[key] = nuevoSaldo;
+
         return {
-          Fecha: m.created_at,
-          Documento: m.referencia_tipo,
-          Tipo: m.tipo_movimiento,
-          Cantidad: m.cantidad,
-          Saldo: saldo,
-          Bodega: m.bodega_nombre || 'N/A',
+          Fecha: row.fecha,
+          Producto: row.producto_nombre,
+          SKU: row.sku || '',
+          Documento: row.documento || '',
+          Tipo: row.tipo,
+          Cantidad: row.cantidad,
+          'Saldo Acumulado': nuevoSaldo,
+          Bodega: row.bodega_nombre || 'N/A',
         };
       });
-      filename = `kardex_${producto_id}.csv`;
-    } else {
-      // Construir filtros base para los otros reportes
+
+      filename = `kardex_${producto_id || 'todos'}_${inicio}_${fin}.csv`;
+    }
+
+    // ========== RENTABILIDAD ==========
+    else if (tipo === 'rentabilidad') {
+      let inicio = fecha_inicio || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+      let fin = fecha_fin || new Date().toISOString().split('T')[0];
+      validarFechas(inicio, fin);
+
       let sql = `
-        SELECT p.id, p.nombre, p.stock_actual, p.costo_promedio, p.precio_unitario,
-               p.codigo_sku, p.ubicacion,
-               c.nombre AS categoria_nombre,
-               mar.nombre AS marca_nombre
+        SELECT 
+          p.id,
+          p.nombre AS producto,
+          p.codigo_sku AS sku,
+          p.costo_promedio,
+          p.precio_unitario,
+          COALESCE(SUM(df.cantidad), 0) AS total_vendido,
+          COALESCE(SUM(df.subtotal), 0) AS total_ingresos,
+          COALESCE(SUM(df.cantidad * p.costo_promedio), 0) AS total_costo
         FROM productos p
-        LEFT JOIN categorias c ON p.categoria_id = c.id
-        LEFT JOIN marcas mar ON p.marca_id = mar.id
+        LEFT JOIN detalles_factura df ON p.id = df.producto_id
+        LEFT JOIN facturas f ON df.factura_id = f.id
         WHERE p.organizacion_id = ? AND p.activo = 1
+          AND (f.estado = 'Pagada' OR f.estado IS NULL)
+          AND (f.creado_en BETWEEN ? AND ? OR f.creado_en IS NULL)
+      `;
+      const params = [organizacion_id, `${inicio} 00:00:00`, `${fin} 23:59:59`];
+
+      if (producto_id) {
+        sql += ' AND p.id = ?';
+        params.push(producto_id);
+      }
+
+      sql += ' GROUP BY p.id ORDER BY total_ingresos DESC';
+
+      const [rows] = await pool.query(sql, params);
+
+      data = rows.map(r => ({
+        Producto: r.producto,
+        SKU: r.sku || '',
+        'Costo Promedio': parseFloat(r.costo_promedio).toFixed(2),
+        'Precio Venta': parseFloat(r.precio_unitario).toFixed(2),
+        'Unidades Vendidas': r.total_vendido,
+        'Ingresos Totales': parseFloat(r.total_ingresos).toFixed(2),
+        'Costo Total': parseFloat(r.total_costo).toFixed(2),
+        'Margen $': (parseFloat(r.total_ingresos) - parseFloat(r.total_costo)).toFixed(2),
+        'Margen %': parseFloat(r.total_ingresos) > 0
+          ? (((parseFloat(r.total_ingresos) - parseFloat(r.total_costo)) / parseFloat(r.total_ingresos)) * 100).toFixed(2)
+          : '0.00',
+      }));
+
+      filename = `rentabilidad_${inicio}_${fin}.csv`;
+    }
+
+    // ========== TOMA FÍSICA ==========
+    else if (tipo === 'toma-fisica') {
+      let sql = `
+        SELECT 
+          p.id,
+          p.nombre AS producto,
+          p.codigo_sku AS sku,
+          p.ubicacion,
+          p.stock_actual AS stock_sistema,
+          '' AS stock_fisico
+        FROM productos p
+        WHERE p.organizacion_id = ? AND p.activo = 1 AND p.tipo = 'Producto'
       `;
       const params = [organizacion_id];
+      if (bodega_id) {
+        sql += ' AND p.id IN (SELECT producto_id FROM producto_bodega WHERE bodega_id = ?)';
+        params.push(bodega_id);
+      }
+      sql += ' ORDER BY p.nombre ASC';
 
-      // Aplicar filtros
+      const [rows] = await pool.query(sql, params);
+      data = rows.map(r => ({
+        Producto: r.producto,
+        SKU: r.sku || '',
+        Ubicación: r.ubicacion || '',
+        'Stock Sistema': r.stock_sistema,
+        'Stock Físico': r.stock_fisico,
+      }));
+      filename = 'toma_fisica.csv';
+    }
+
+    // ========== LENTO MOVIMIENTO ==========
+    else if (tipo === 'lento-movimiento') {
+      const diasFiltro = parseInt(dias) || 5; 
+      let sql = `
+        SELECT 
+          p.id,
+          p.nombre AS producto,
+          p.codigo_sku AS sku,
+          p.stock_actual,
+          p.costo_promedio,
+          (p.stock_actual * p.costo_promedio) AS valor_stock
+        FROM productos p
+        WHERE p.organizacion_id = ? AND p.activo = 1
+          AND p.id NOT IN (
+            SELECT DISTINCT df.producto_id 
+            FROM detalles_factura df
+            JOIN facturas f ON df.factura_id = f.id
+            WHERE f.estado = 'Pagada' 
+              AND f.creado_en >= DATE_SUB(CURRENT_DATE(), INTERVAL ? DAY)
+          )
+      `;
+      const params = [organizacion_id, diasFiltro];
+
       if (estado_stock) {
         if (estado_stock === 'agotados') sql += ' AND p.stock_actual <= 0';
         else if (estado_stock === 'minimo') sql += ' AND p.stock_actual <= p.stock_minimo AND p.stock_actual > 0';
@@ -802,90 +951,235 @@ exports.exportarReporte = async (req, res) => {
         params.push(etiqueta_id);
       }
 
-      switch (tipo) {
-        case 'rentabilidad':
-          sql += ' ORDER BY (p.precio_unitario - p.costo_promedio) DESC';
-          const [rowsRent] = await pool.query(sql, params);
-          data = rowsRent.map(r => ({
-            Producto: r.nombre,
-            SKU: r.codigo_sku,
-            'Precio Venta': r.precio_unitario,
-            'Costo Promedio': r.costo_promedio,
-            'Margen $': parseFloat(r.precio_unitario) - parseFloat(r.costo_promedio),
-            'Margen %': parseFloat(r.precio_unitario) > 0
-              ? ((parseFloat(r.precio_unitario) - parseFloat(r.costo_promedio)) / parseFloat(r.precio_unitario) * 100).toFixed(2)
-              : 0,
-          }));
-          filename = 'rentabilidad_productos.csv';
-          break;
+      sql += ' ORDER BY p.nombre ASC';
 
-        case 'toma-fisica':
-          sql += ' AND p.tipo = "Producto" ORDER BY p.nombre ASC';
-          const [rowsFisica] = await pool.query(sql, params);
-          data = rowsFisica.map(r => ({
-            'Código SKU': r.codigo_sku,
-            Producto: r.nombre,
-            Ubicación: r.ubicacion || '',
-            'Stock Sistema': r.stock_actual,
-            'Stock Físico': '',
-          }));
-          filename = 'toma_fisica.csv';
-          break;
+      const [rows] = await pool.query(sql, params);
+      data = rows.map(r => ({
+        Producto: r.producto,
+        SKU: r.sku || '',
+        Stock: r.stock_actual,
+        'Costo Unitario': parseFloat(r.costo_promedio).toFixed(2),
+        'Valor Stock': parseFloat(r.valor_stock).toFixed(2),
+      }));
+      filename = `lento_movimiento_${diasFiltro}dias.csv`;
+    }
 
-        case 'lento-movimiento':
-          const diasFiltro = parseInt(dias) || 90;
-          sql += ` AND p.id NOT IN (
-            SELECT DISTINCT df.producto_id FROM detalles_factura df
-            JOIN facturas f ON df.factura_id = f.id
-            WHERE f.estado = 'Pagada' AND f.creado_en >= DATE_SUB(CURRENT_DATE(), INTERVAL ? DAY)
-          )`;
-          params.push(diasFiltro);
-          sql += ' ORDER BY p.nombre ASC';
-          const [rowsLento] = await pool.query(sql, params);
-          data = rowsLento.map(r => ({
-            Producto: r.nombre,
-            SKU: r.codigo_sku,
-            Stock: r.stock_actual,
-            'Costo Unitario': r.costo_promedio,
-            'Valor Stock': (parseFloat(r.stock_actual) * parseFloat(r.costo_promedio)).toFixed(2),
-          }));
-          filename = `lento_movimiento_${diasFiltro}dias.csv`;
-          break;
+    // ========== VALORACIÓN ==========
+    else if (tipo === 'valoracion') {
+      let sql = `
+        SELECT 
+          p.id,
+          p.nombre AS producto,
+          p.codigo_sku AS sku,
+          p.stock_actual,
+          p.costo_promedio,
+          (p.stock_actual * p.costo_promedio) AS valor_total
+        FROM productos p
+        WHERE p.organizacion_id = ? AND p.activo = 1 AND p.stock_actual > 0
+      `;
+      const params = [organizacion_id];
 
-        case 'valoracion':
-          sql += ' AND p.stock_actual > 0 ORDER BY (p.stock_actual * p.costo_promedio) DESC';
-          const [rowsVal] = await pool.query(sql, params);
-          data = rowsVal.map(r => ({
-            Producto: r.nombre,
-            SKU: r.codigo_sku,
-            Stock: r.stock_actual,
-            'Costo Promedio': r.costo_promedio,
-            'Valor Total': (parseFloat(r.stock_actual) * parseFloat(r.costo_promedio)).toFixed(2),
-          }));
-          filename = 'valoracion_inventario.csv';
-          break;
-
-        default:
-          return res.status(400).json({ message: 'Tipo de reporte inválido' });
+      if (estado_stock) {
+        if (estado_stock === 'agotados') sql += ' AND p.stock_actual <= 0';
+        else if (estado_stock === 'minimo') sql += ' AND p.stock_actual <= p.stock_minimo AND p.stock_actual > 0';
+        else if (estado_stock === 'con_existencias') sql += ' AND p.stock_actual > 0';
       }
+      if (tipo_producto) {
+        sql += ' AND p.tipo = ?';
+        params.push(tipo_producto);
+      }
+      if (bodega_id) {
+        sql += ' AND p.id IN (SELECT producto_id FROM producto_bodega WHERE bodega_id = ?)';
+        params.push(bodega_id);
+      }
+      if (categoria_id) {
+        sql += ' AND p.categoria_id = ?';
+        params.push(categoria_id);
+      }
+      if (marca_id) {
+        sql += ' AND p.marca_id = ?';
+        params.push(marca_id);
+      }
+      if (etiqueta_id) {
+        sql += ' AND p.id IN (SELECT producto_id FROM producto_etiquetas WHERE etiqueta_id = ?)';
+        params.push(etiqueta_id);
+      }
+
+      sql += ' ORDER BY valor_total DESC';
+
+      const [rows] = await pool.query(sql, params);
+      data = rows.map(r => ({
+        Producto: r.producto,
+        SKU: r.sku || '',
+        Stock: r.stock_actual,
+        'Costo Promedio': parseFloat(r.costo_promedio).toFixed(2),
+        'Valor Total': parseFloat(r.valor_total).toFixed(2),
+      }));
+      filename = 'valoracion_inventario.csv';
+    }
+
+    // ========== TOP 30 CAMBIOS DE PRECIO (AHORA FILA POR FILA Y ÚLTIMOS 6 MESES) ==========
+    else if (tipo === 'top-cambios-precio') {
+      const [rows] = await pool.query(`
+        SELECT 
+          p.nombre AS Producto,
+          p.codigo_sku AS SKU,
+          p.costo_promedio AS Costo_Actual,
+          DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s') AS Fecha_Cambio,
+          ch.costo_anterior AS Precio_Anterior,
+          IFNULL(prov.razon_social, 'N/A') AS Proveedor,
+          ch.motivo AS Motivo,
+          IFNULL(ch.comentario, '') AS Comentario
+        FROM costos_historicos ch
+        JOIN productos p ON ch.producto_id = p.id
+        LEFT JOIN proveedores prov ON ch.proveedor_id = prov.id
+        WHERE p.organizacion_id = ? 
+          AND p.activo = 1
+          AND ch.created_at >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
+        ORDER BY ch.created_at DESC
+        LIMIT 30
+      `, [organizacion_id]);
+
+      data = rows.map(r => ({
+        Producto: r.Producto,
+        SKU: r.SKU || '',
+        'Costo Actual': parseFloat(r.Costo_Actual).toFixed(2),
+        'Fecha de cambio': r.Fecha_Cambio,
+        'Precio Anterior': parseFloat(r.Precio_Anterior).toFixed(2),
+        Proveedor: r.Proveedor,
+        Motivo: r.Motivo,
+        Comentario: r.Comentario,
+      }));
+      filename = 'top_cambios_precio.csv';
+    }
+
+    else {
+      return res.status(400).json({ message: 'Tipo de reporte inválido' });
     }
 
     if (data.length === 0) {
       return res.status(404).json({ message: 'No hay datos para exportar' });
     }
 
+    let tituloReporte = 'REPORTE GENERAL';
+    if (tipo === 'kardex') tituloReporte = 'KARDEX DETALLADO';
+    else if (tipo === 'rentabilidad') tituloReporte = 'RENTABILIDAD POR PRODUCTO';
+    else if (tipo === 'toma-fisica') tituloReporte = 'HOJA DE TOMA FÍSICA';
+    else if (tipo === 'lento-movimiento') tituloReporte = 'MERCANCÍA DE LENTO MOVIMIENTO';
+    else if (tipo === 'valoracion') tituloReporte = 'VALORACIÓN DE INVENTARIO';
+    else if (tipo === 'top-cambios-precio') tituloReporte = 'TOP 30 CAMBIOS DE PRECIO';
+
     const headers = Object.keys(data[0]);
-    let csv = headers.join(',') + '\n';
+    let csv = '\uFEFF'; 
+    csv += 'sep=;\n';   
+    csv += headers.join(';') + '\n'; 
+
     for (const row of data) {
-      csv += headers.map(h => `"${row[h] || ''}"`).join(',') + '\n';
+      csv += headers.map(h => {
+        let val = row[h] !== undefined && row[h] !== null ? row[h] : '';
+        val = String(val);
+        if (val.includes(';') || val.includes('\n') || val.includes('"')) {
+          val = `"${val.replace(/"/g, '""')}"`;
+        }
+        return val;
+      }).join(';') + '\n';
     }
 
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     res.send(csv);
   } catch (error) {
     console.error('❌ [exportarReporte] Error:', error);
     res.status(500).json({ message: 'Error al exportar reporte', error: error.message });
+  }
+};
+
+// ============================================================
+// EXPORTAR TABLA FILTRADA (todos los productos)
+// ============================================================
+exports.exportarTabla = async (req, res) => {
+  try {
+    const organizacion_id = req.organizacion_id;
+    const {
+      search,
+      tipo,
+      estado_stock,
+      bodega_id,
+      categoria_id,
+      marca_id,
+      etiqueta_id,
+    } = req.query;
+
+    const result = await getProductosConFiltros(organizacion_id, {
+      search,
+      tipo,
+      estado_stock,
+      bodega_id,
+      categoria_id,
+      marca_id,
+      etiqueta_id,
+      page: 1,
+      limit: 99999,
+    });
+
+    const productos = result.productos || [];
+
+    if (productos.length === 0) {
+      return res.status(404).json({ message: 'No hay productos para exportar' });
+    }
+
+    const data = productos.map(p => ({
+      Nombre: p.nombre,
+      SKU: p.codigo_sku || '',
+      'Código Barras': p.codigo_barras || '',
+      Tipo: p.tipo || 'Producto',
+      Stock: p.stock_actual,
+      'Stock Mínimo': p.stock_minimo,
+      'Precio Unitario': parseFloat(p.precio_unitario).toFixed(2),
+      'Costo Promedio': parseFloat(p.costo_promedio).toFixed(2),
+      'Valor Inventario': (parseFloat(p.stock_actual) * parseFloat(p.costo_promedio)).toFixed(2),
+      Categoría: p.categoria_nombre || '',
+      Marca: p.marca_nombre || '',
+      Etiquetas: p.etiquetas || '',
+    }));
+
+    let parteEstado = 'Inventario General';
+    if (estado_stock === 'minimo' || estado_stock === 'punto_reorden') {
+      parteEstado = 'Productos en Punto de Reorden';
+    } else if (estado_stock === 'con_existencias') {
+      parteEstado = 'Productos con Existencias';
+    } else if (estado_stock === 'agotados') {
+      parteEstado = 'Productos Agotados';
+    }
+
+    let parteTipo = tipo ? `Tipo: ${tipo}` : 'Tipo: Todos';
+    let tituloDinamico = `${parteEstado} | ${parteTipo}`;
+
+    const headers = Object.keys(data[0]);
+    let csv = '\uFEFF';
+    let sepChar = ';';
+    csv += `sep=${sepChar}\n`;
+    csv += `"${tituloDinamico}";;\n\n`; 
+    csv += headers.join(sepChar) + '\n'; 
+
+    for (const row of data) {
+      csv += headers.map(h => {
+        let val = row[h] !== undefined && row[h] !== null ? row[h] : '';
+        val = String(val); 
+        if (val.includes(sepChar) || val.includes('\n') || val.includes('"')) {
+          val = `"${val.replace(/"/g, '""')}"`;
+        }
+        return val;
+      }).join(sepChar) + '\n';
+    }
+
+    const filename = `productos_${estado_stock || 'general'}_${new Date().toISOString().split('T')[0]}.csv`;
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(csv);
+  } catch (error) {
+    console.error('❌ [exportarTabla] Error:', error);
+    res.status(500).json({ message: 'Error al exportar tabla', error: error.message });
   }
 };
 
@@ -957,24 +1251,46 @@ exports.removeKitComponente = async (req, res) => {
 };
 
 // ============================================================
-// 8. COSTOS HISTÓRICOS
+// 8. COSTOS HISTÓRICOS (CON VALIDACIÓN DE MOTIVO Y LÓGICA DE PRECIOS)
 // ============================================================
 
 exports.registrarCostoHistorico = async (req, res) => {
+  let connection;
+  
   try {
     const organizacion_id = req.organizacion_id;
-    const usuario_id = req.usuario_id;
-    const { producto_id, proveedor_id, costo_nuevo, motivo } = req.body;
+    const usuario_id = req.usuario_id || req.user?.id;
+    const { producto_id, proveedor_id, costo_nuevo, motivo, comentario } = req.body;
 
-    if (!producto_id || !costo_nuevo || costo_nuevo <= 0) {
+    // 1. Validar campos obligatorios (proveedor_id queda excluido para permitir cambios internos)
+    if (!producto_id || costo_nuevo === undefined || costo_nuevo === null || !motivo) {
       return res.status(400).json({ message: 'Faltan campos obligatorios' });
     }
 
-    const [producto] = await pool.query(
-      'SELECT costo_promedio FROM productos WHERE id = ? AND organizacion_id = ?',
+    // Validar motivo estrictamente a "Aumento" o "Rebaja"
+    const motivoTrim = motivo.trim().toLowerCase();
+    let motivoFinal = '';
+    if (motivoTrim === 'aumento') {
+      motivoFinal = 'Aumento';
+    } else if (motivoTrim === 'rebaja') {
+      motivoFinal = 'Rebaja';
+    } else {
+      return res.status(400).json({ message: 'El motivo debe ser estrictamente "Aumento" o "Rebaja".' });
+    }
+
+    // 2. Iniciar Transacción de Base de Datos para asegurar atomicidad
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Buscar producto bloqueando la fila (FOR UPDATE)
+    const [producto] = await connection.query(
+      'SELECT costo_promedio FROM productos WHERE id = ? AND organizacion_id = ? FOR UPDATE',
       [producto_id, organizacion_id]
     );
+    
     if (producto.length === 0) {
+      await connection.rollback();
+      connection.release();
       return res.status(404).json({ message: 'Producto no encontrado' });
     }
 
@@ -982,20 +1298,40 @@ exports.registrarCostoHistorico = async (req, res) => {
     const costoNuevo = parseFloat(costo_nuevo);
 
     if (costoAnterior === costoNuevo) {
+      await connection.rollback();
+      connection.release();
       return res.status(400).json({ message: 'El nuevo costo es igual al actual' });
     }
 
-    await pool.query(
+    // Reglas de validación según el motivo:
+    if (motivoFinal === 'Rebaja' && costoNuevo > costoAnterior) {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({ message: 'Si es rebaja el precio no puede ser mayor al actual.' });
+    }
+    if (motivoFinal === 'Aumento' && costoNuevo < costoAnterior) {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({ message: 'Si es aumento no debe ser menor al actual de ajuste de precio.' });
+    }
+
+    // 3. Actualizar el costo del producto
+    await connection.query(
       'UPDATE productos SET costo_promedio = ? WHERE id = ? AND organizacion_id = ?',
       [costoNuevo, producto_id, organizacion_id]
     );
 
-    await pool.query(
+    // 4. Insertar el histórico (si no hay proveedor, se guarda como null de forma segura)
+    await connection.query(
       `INSERT INTO costos_historicos 
-       (producto_id, proveedor_id, costo_anterior, costo_nuevo, motivo, usuario_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [producto_id, proveedor_id || null, costoAnterior, costoNuevo, motivo || '', usuario_id]
+       (producto_id, proveedor_id, costo_anterior, costo_nuevo, motivo, comentario, usuario_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [producto_id, proveedor_id || null, costoAnterior, costoNuevo, motivoFinal, comentario || '', usuario_id]
     );
+
+    // 5. Confirmar transacción
+    await connection.commit();
+    connection.release();
 
     res.json({
       message: 'Costo actualizado correctamente',
@@ -1003,6 +1339,10 @@ exports.registrarCostoHistorico = async (req, res) => {
       costo_nuevo: costoNuevo,
     });
   } catch (error) {
+    if (connection) {
+      await connection.rollback();
+      connection.release();
+    }
     console.error('❌ [registrarCostoHistorico] Error:', error);
     res.status(500).json({ message: 'Error al registrar costo histórico', error: error.message });
   }
@@ -1349,7 +1689,6 @@ exports.asignarEtiquetaAProducto = async (req, res) => {
   try {
     const { producto_id, etiqueta_id } = req.body;
     const organizacion_id = req.organizacion_id;
-    // Verificar que el producto pertenezca a la organización
     const [producto] = await pool.query(
       'SELECT id FROM productos WHERE id = ? AND organizacion_id = ?',
       [producto_id, organizacion_id]
@@ -1404,6 +1743,67 @@ exports.getEtiquetasDeProducto = async (req, res) => {
   } catch (error) {
     console.error('❌ [getEtiquetasDeProducto] Error:', error);
     res.status(500).json({ message: 'Error al obtener etiquetas del producto', error: error.message });
+  }
+};
+
+// ============================================================
+// REPORTE: TOP CAMBIOS DE PRECIO (FILA POR FILA Y 6 MESES)
+// ============================================================
+exports.getTopCambiosPrecio = async (req, res) => {
+  try {
+    const organizacion_id = req.organizacion_id;
+
+    const [rows] = await pool.query(
+      `SELECT 
+        p.nombre AS producto,
+        p.codigo_sku AS sku,
+        p.costo_promedio AS costo_actual,
+        DATE_FORMAT(ch.created_at, '%Y-%m-%d %H:%i:%s') AS fecha_cambio,
+        ch.costo_anterior AS precio_anterior,
+        prov.razon_social AS proveedor,
+        ch.motivo,
+        ch.comentario
+      FROM costos_historicos ch
+      JOIN productos p ON ch.producto_id = p.id
+      LEFT JOIN proveedores prov ON ch.proveedor_id = prov.id
+      WHERE p.organizacion_id = ?
+        AND p.activo = 1
+        AND ch.created_at >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
+      ORDER BY ch.created_at DESC
+      LIMIT 30`, 
+      [organizacion_id]
+    );
+
+    return res.json(rows);
+
+  } catch (error) {
+    console.error('❌ [getTopCambiosPrecio] Error:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        message: 'Error al obtener cambios de precio', 
+        error: error.message 
+      });
+    }
+  }
+};
+
+exports.getAniosDisponibles = async (req, res) => {
+  try {
+    const organizacion_id = req.organizacion_id;
+    const [rows] = await pool.query(
+      `SELECT DISTINCT YEAR(created_at) AS anio
+       FROM movimientos_inventario
+       WHERE organizacion_id = ?
+       ORDER BY anio DESC`,
+      [organizacion_id]
+    );
+    if (rows.length === 0) {
+      return res.json([]);
+    }
+    res.json(rows.map(r => r.anio));
+  } catch (error) {
+    console.error('❌ [getAniosDisponibles] Error:', error);
+    res.status(500).json({ message: 'Error al obtener años disponibles', error: error.message });
   }
 };
 

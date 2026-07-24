@@ -8,6 +8,7 @@ router.use(authMiddleware);
 
 // ========== DASHBOARD ==========
 router.get('/dashboard', inventoryController.getInventoryDashboard);
+router.get('/dashboard/anios', inventoryController.getAniosDisponibles);
 
 // ========== BODEGAS ==========
 router.get('/bodegas', inventoryController.findAllWarehouses);
@@ -59,6 +60,8 @@ router.get('/reportes/lento-movimiento', inventoryController.getLentoMovimiento)
 router.get('/reportes/valoracion', inventoryController.getValoracionInventario);
 router.get('/reportes/toma-fisica', inventoryController.getTomaFisica);
 router.get('/reportes/exportar/:tipo', inventoryController.exportarReporte);
+router.get('/reportes/exportar-tabla', inventoryController.exportarTabla);
+router.get('/reportes/top-cambios-precio', inventoryController.getTopCambiosPrecio);
 
 // ========== KITS ==========
 router.get('/kits/:producto_kit_id', inventoryController.getKitComponentes);

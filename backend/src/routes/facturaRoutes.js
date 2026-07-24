@@ -16,6 +16,9 @@ router.put('/:id/estado', facturaController.cambiarEstadoFactura);
 router.put('/:id', facturaController.editarFactura);
 router.put('/:id/anular', facturaController.anularFactura);
 
+router.post('/:factura_id/detalles', facturaController.crearDetalle);
+router.delete('/detalles/:id', facturaController.eliminarDetalle);
+
 // ¡Esta es la ruta del PDF!
 router.get('/:id/pdf', facturaController.generarPDF);
 

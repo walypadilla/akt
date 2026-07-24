@@ -181,12 +181,43 @@ export const getTomaFisica = async (params = {}) => {
   return response.data;
 };
 
-export const exportarReporte = async (tipo, params = {}) => {
+export const getTopCambiosPrecio = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
-  const response = await apiClient.get(`/inventario/reportes/exportar/${tipo}?${query}`, {
-    responseType: 'blob',
-  });
+  const response = await apiClient.get(`/inventario/reportes/top-cambios-precio?${query}`);
   return response.data;
+};
+
+export const exportarReporte = async (tipo, params = {}) => {
+  let url = '';
+  if (tipo === 'tabla') {
+    url = '/inventario/reportes/exportar-tabla';
+  } else {
+    url = `/inventario/reportes/exportar/${tipo}`;
+  }
+
+  try {
+    const response = await apiClient.get(url, {
+      params,
+      responseType: 'blob',
+    });
+
+    return new Blob(['\ufeff', response.data], { 
+      type: 'text/csv;charset=utf-8;' 
+    });
+
+  } catch (error) {
+    // Si la respuesta es un blob de error, leemos su contenido original
+    if (error.response && error.response.data instanceof Blob) {
+      const text = await error.response.data.text();
+      try {
+        const json = JSON.parse(text);
+        throw new Error(json.message || 'Error al exportar');
+      } catch {
+        throw new Error(text || 'Error al exportar');
+      }
+    }
+    throw error;
+  }
 };
 
 // ============================================================
@@ -210,11 +241,20 @@ export const getProyeccionAgotamiento = async (producto_id) => {
 };
 
 // ============================================================
-// NUEVA: PROYECCIÓN MASIVA
+// PROYECCIÓN MASIVA
 // ============================================================
 
 export const getProyeccionAgotamientoMasiva = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
   const response = await apiClient.get(`/inventario/proyeccion-masiva?${query}`);
+  return response.data;
+};
+
+// ============================================================
+// DASHBOARD - AÑOS DISPONIBLES
+// ============================================================
+
+export const getAniosDisponibles = async () => {
+  const response = await apiClient.get('/inventario/dashboard/anios');
   return response.data;
 };

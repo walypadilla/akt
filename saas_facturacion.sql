@@ -40,6 +40,38 @@ INSERT INTO `actividades_economicas` VALUES ('46300','Venta al por mayor de prod
 UNLOCK TABLES;
 
 --
+-- Table structure for table `aguinaldos`
+--
+
+DROP TABLE IF EXISTS `aguinaldos`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `aguinaldos` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `empleado_id` int NOT NULL,
+  `anio` int NOT NULL,
+  `monto` decimal(10,2) NOT NULL,
+  `pagado` tinyint(1) DEFAULT '0',
+  `fecha_pago` date DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_empleado_anio` (`empleado_id`,`anio`),
+  KEY `organizacion_id` (`organizacion_id`),
+  CONSTRAINT `aguinaldos_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`),
+  CONSTRAINT `aguinaldos_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `aguinaldos`
+--
+
+LOCK TABLES `aguinaldos` WRITE;
+/*!40000 ALTER TABLE `aguinaldos` DISABLE KEYS */;
+/*!40000 ALTER TABLE `aguinaldos` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `ajustes_inventario`
 --
 
@@ -67,7 +99,7 @@ CREATE TABLE `ajustes_inventario` (
   CONSTRAINT `ajustes_inventario_ibfk_2` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `ajustes_inventario_ibfk_3` FOREIGN KEY (`bodega_id`) REFERENCES `bodegas` (`id`) ON DELETE SET NULL,
   CONSTRAINT `ajustes_inventario_ibfk_4` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -76,7 +108,41 @@ CREATE TABLE `ajustes_inventario` (
 
 LOCK TABLES `ajustes_inventario` WRITE;
 /*!40000 ALTER TABLE `ajustes_inventario` DISABLE KEYS */;
+INSERT INTO `ajustes_inventario` VALUES (1,6,13,NULL,'Entrada',5.00,'Otro','Devolucion cliente',0.00,8,'2026-07-22 16:01:51'),(2,6,19,NULL,'Salida',1.00,'Merma','producto vencido',0.00,8,'2026-07-22 16:02:55'),(3,6,8,NULL,'Entrada',3.00,'Otro','devolucion de factura',0.00,8,'2026-07-23 02:00:47');
 /*!40000 ALTER TABLE `ajustes_inventario` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `ausencias_empleado`
+--
+
+DROP TABLE IF EXISTS `ausencias_empleado`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ausencias_empleado` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `empleado_id` int NOT NULL,
+  `fecha` date NOT NULL,
+  `tipo` enum('Justificada','Injustificada','Incapacidad_ISSS') NOT NULL,
+  `remunerada` tinyint(1) DEFAULT '1',
+  `dias` decimal(4,1) NOT NULL,
+  `observacion` text,
+  PRIMARY KEY (`id`),
+  KEY `idx_empleado_fecha` (`empleado_id`,`fecha`),
+  KEY `organizacion_id` (`organizacion_id`),
+  CONSTRAINT `ausencias_empleado_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ausencias_empleado_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `ausencias_empleado`
+--
+
+LOCK TABLES `ausencias_empleado` WRITE;
+/*!40000 ALTER TABLE `ausencias_empleado` DISABLE KEYS */;
+/*!40000 ALTER TABLE `ausencias_empleado` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -91,13 +157,14 @@ CREATE TABLE `bodegas` (
   `organizacion_id` int NOT NULL,
   `nombre` varchar(100) NOT NULL,
   `direccion` varchar(255) DEFAULT NULL,
+  `responsable` varchar(100) DEFAULT NULL,
   `telefono` varchar(20) DEFAULT NULL,
   `activo` tinyint(1) NOT NULL DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_bodega_org` (`organizacion_id`,`nombre`),
   CONSTRAINT `bodegas_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -106,7 +173,7 @@ CREATE TABLE `bodegas` (
 
 LOCK TABLES `bodegas` WRITE;
 /*!40000 ALTER TABLE `bodegas` DISABLE KEYS */;
-INSERT INTO `bodegas` VALUES (1,1,'Bodega Principal','San Salvador, El Salvador',NULL,1,'2026-07-20 20:31:56');
+INSERT INTO `bodegas` VALUES (1,1,'Bodega Principal','San Salvador, El Salvador',NULL,NULL,1,'2026-07-20 20:31:56');
 /*!40000 ALTER TABLE `bodegas` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -128,7 +195,7 @@ CREATE TABLE `categorias` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_categoria_org` (`organizacion_id`,`nombre`),
   CONSTRAINT `categorias_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -137,6 +204,7 @@ CREATE TABLE `categorias` (
 
 LOCK TABLES `categorias` WRITE;
 /*!40000 ALTER TABLE `categorias` DISABLE KEYS */;
+INSERT INTO `categorias` VALUES (1,6,'Contruccion',NULL,NULL,1,'2026-07-21 21:34:09'),(2,6,'Refrescos',NULL,NULL,1,'2026-07-21 21:39:20'),(3,6,'Snack',NULL,NULL,1,'2026-07-21 21:47:12'),(4,6,'Limpieza',NULL,NULL,1,'2026-07-21 22:14:01'),(5,6,'Cereales',NULL,NULL,1,'2026-07-21 23:11:30'),(6,1,'Suscripcion',NULL,NULL,1,'2026-07-21 23:42:08'),(7,6,'Comestibles',NULL,NULL,1,'2026-07-22 00:47:07'),(8,6,'Nescafe',NULL,NULL,1,'2026-07-22 00:54:28');
 /*!40000 ALTER TABLE `categorias` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -170,7 +238,7 @@ CREATE TABLE `clientes` (
   KEY `id_departamento` (`id_departamento`,`id_municipio`),
   CONSTRAINT `clientes_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
   CONSTRAINT `clientes_ibfk_2` FOREIGN KEY (`id_departamento`, `id_municipio`) REFERENCES `municipios` (`id_departamento`, `id_municipio`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=37 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=38 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -275,6 +343,7 @@ CREATE TABLE `costos_historicos` (
   `motivo` varchar(255) DEFAULT NULL,
   `usuario_id` int NOT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `comentario` text,
   PRIMARY KEY (`id`),
   KEY `producto_id` (`producto_id`),
   KEY `proveedor_id` (`proveedor_id`),
@@ -282,7 +351,7 @@ CREATE TABLE `costos_historicos` (
   CONSTRAINT `costos_historicos_ibfk_1` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `costos_historicos_ibfk_2` FOREIGN KEY (`proveedor_id`) REFERENCES `proveedores` (`id`) ON DELETE SET NULL,
   CONSTRAINT `costos_historicos_ibfk_3` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -291,6 +360,7 @@ CREATE TABLE `costos_historicos` (
 
 LOCK TABLES `costos_historicos` WRITE;
 /*!40000 ALTER TABLE `costos_historicos` DISABLE KEYS */;
+INSERT INTO `costos_historicos` VALUES (1,4,NULL,10.00,12.00,'Actualizacion de precio por proveedor',8,'2026-07-22 05:50:41',NULL),(2,4,NULL,12.00,13.02,'Ajuste por proveedor',8,'2026-07-22 06:28:59',NULL),(3,19,NULL,3.00,3.49,'Ajuste de Proveedor',8,'2026-07-22 13:58:25',NULL),(4,9,NULL,0.37,0.39,'Aumento',8,'2026-07-23 05:43:12',''),(5,9,NULL,0.39,0.38,'Rebaja',8,'2026-07-23 05:46:32','');
 /*!40000 ALTER TABLE `costos_historicos` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -369,7 +439,7 @@ CREATE TABLE `detalles_factura` (
   KEY `producto_id` (`producto_id`),
   CONSTRAINT `detalles_factura_ibfk_1` FOREIGN KEY (`factura_id`) REFERENCES `facturas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `detalles_factura_ibfk_2` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -378,7 +448,7 @@ CREATE TABLE `detalles_factura` (
 
 LOCK TABLES `detalles_factura` WRITE;
 /*!40000 ALTER TABLE `detalles_factura` DISABLE KEYS */;
-INSERT INTO `detalles_factura` VALUES (1,1,2,1.00,10.00,10.00,1.30),(2,1,2,1.00,10.00,10.00,1.30),(3,1,2,1.00,10.00,10.00,1.30),(4,2,2,1.00,10.00,10.00,1.30),(5,3,2,1.00,10.00,10.00,1.30),(6,4,2,1.00,10.00,10.00,1.30),(7,5,2,1.00,10.00,10.00,1.30),(8,6,2,1.00,10.00,10.00,1.30),(9,7,2,1.00,10.00,10.00,1.30),(10,1,2,1.00,10.00,10.00,1.30);
+INSERT INTO `detalles_factura` VALUES (1,1,2,1.00,10.00,10.00,1.30),(2,1,2,1.00,10.00,10.00,1.30),(3,1,2,1.00,10.00,10.00,1.30),(4,2,2,1.00,10.00,10.00,1.30),(5,3,2,1.00,10.00,10.00,1.30),(6,4,2,1.00,10.00,10.00,1.30),(7,5,2,1.00,10.00,10.00,1.30),(8,6,2,1.00,10.00,10.00,1.30),(9,7,2,1.00,10.00,10.00,1.30),(10,1,2,1.00,10.00,10.00,1.30),(11,2,2,1.00,10.00,10.00,1.30),(12,2,2,1.00,10.00,10.00,1.30);
 /*!40000 ALTER TABLE `detalles_factura` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -393,17 +463,21 @@ CREATE TABLE `empleados_nomina` (
   `id` int NOT NULL AUTO_INCREMENT,
   `organizacion_id` int NOT NULL,
   `nombre` varchar(100) NOT NULL,
+  `apellidos` varchar(100) DEFAULT NULL,
   `salario_base` decimal(10,2) NOT NULL,
   `dui` varchar(10) NOT NULL,
   `cotiza_isss` tinyint(1) DEFAULT '1',
   `cotiza_afp` tinyint(1) DEFAULT '1',
   `afp_numero` varchar(20) DEFAULT NULL,
   `isss_numero` varchar(20) DEFAULT NULL,
+  `tipo_periodo` enum('Mensual','Quincenal','Semanal') DEFAULT 'Mensual',
+  `fecha_ingreso` date DEFAULT NULL,
+  `activo` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`),
   UNIQUE KEY `dui` (`dui`),
   KEY `organizacion_id` (`organizacion_id`),
   CONSTRAINT `empleados_nomina_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -412,6 +486,7 @@ CREATE TABLE `empleados_nomina` (
 
 LOCK TABLES `empleados_nomina` WRITE;
 /*!40000 ALTER TABLE `empleados_nomina` DISABLE KEYS */;
+INSERT INTO `empleados_nomina` VALUES (1,6,'walter Padilla','Padilla Pozo',200.00,'05292055-6',1,1,'123344555656','162528838','Mensual',NULL,1),(2,6,'Juan Valdez','Araya',990.00,'05292055-5',1,1,'123344555656','162528838','Mensual',NULL,1);
 /*!40000 ALTER TABLE `empleados_nomina` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -479,7 +554,7 @@ CREATE TABLE `facturas` (
   CONSTRAINT `facturas_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `facturas_ibfk_3` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`),
   CONSTRAINT `fk_factura_bodega` FOREIGN KEY (`bodega_id`) REFERENCES `bodegas` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -488,8 +563,44 @@ CREATE TABLE `facturas` (
 
 LOCK TABLES `facturas` WRITE;
 /*!40000 ALTER TABLE `facturas` DISABLE KEYS */;
-INSERT INTO `facturas` VALUES (1,4,NULL,2,9,'FAF','MEM-000001',10.00,0.00,1.30,0.00,0.00,0.00,11.30,'Emitida','2026-07-20 03:27:59',NULL);
+INSERT INTO `facturas` VALUES (1,4,NULL,2,9,'FAF','MEM-000001',10.00,0.00,1.30,0.00,0.00,0.00,11.30,'Pagada','2026-07-20 03:27:59',NULL),(2,4,NULL,2,9,'FAF','MEM-000002',20.00,0.00,2.60,0.00,0.00,0.00,22.60,'Pagada','2026-07-21 13:47:57',NULL);
 /*!40000 ALTER TABLE `facturas` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `horas_extras_empleado`
+--
+
+DROP TABLE IF EXISTS `horas_extras_empleado`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `horas_extras_empleado` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `empleado_id` int NOT NULL,
+  `periodo_id` int NOT NULL,
+  `horas` decimal(5,2) NOT NULL,
+  `monto_total` decimal(10,2) DEFAULT '0.00',
+  `descripcion` text,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_empleado_periodo` (`empleado_id`,`periodo_id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `periodo_id` (`periodo_id`),
+  CONSTRAINT `horas_extras_empleado_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`),
+  CONSTRAINT `horas_extras_empleado_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`),
+  CONSTRAINT `horas_extras_empleado_ibfk_3` FOREIGN KEY (`periodo_id`) REFERENCES `periodos_pago` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `horas_extras_empleado`
+--
+
+LOCK TABLES `horas_extras_empleado` WRITE;
+/*!40000 ALTER TABLE `horas_extras_empleado` DISABLE KEYS */;
+INSERT INTO `horas_extras_empleado` VALUES (1,6,1,2,3.00,3.75,'ayuda','2026-07-24 04:28:29');
+/*!40000 ALTER TABLE `horas_extras_empleado` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -508,7 +619,7 @@ CREATE TABLE `marcas` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_marca_org` (`organizacion_id`,`nombre`),
   CONSTRAINT `marcas_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -517,6 +628,7 @@ CREATE TABLE `marcas` (
 
 LOCK TABLES `marcas` WRITE;
 /*!40000 ALTER TABLE `marcas` DISABLE KEYS */;
+INSERT INTO `marcas` VALUES (1,6,'Coca-Cola',1,'2026-07-21 21:39:36'),(2,6,'Salva-Cola',1,'2026-07-21 21:42:54'),(3,6,'Boca Deli',1,'2026-07-21 21:47:37'),(4,6,'Chiky',1,'2026-07-21 22:12:34'),(5,6,'Nescafe',1,'2026-07-22 00:54:48');
 /*!40000 ALTER TABLE `marcas` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -676,41 +788,83 @@ INSERT INTO `parametros_inventario` VALUES (1,1,'Promedio_Ponderado',1,0,1,'2026
 UNLOCK TABLES;
 
 --
--- Table structure for table `planillas_mensuales`
+-- Table structure for table `periodos_pago`
 --
 
-DROP TABLE IF EXISTS `planillas_mensuales`;
+DROP TABLE IF EXISTS `periodos_pago`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `planillas_mensuales` (
+CREATE TABLE `periodos_pago` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `tipo` enum('Semanal','Quincenal','Mensual') NOT NULL,
+  `fecha_inicio` date NOT NULL,
+  `fecha_fin` date NOT NULL,
+  `mes` tinyint NOT NULL,
+  `anio` int NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_organizacion` (`organizacion_id`),
+  KEY `idx_fechas` (`fecha_inicio`,`fecha_fin`),
+  CONSTRAINT `periodos_pago_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `periodos_pago`
+--
+
+LOCK TABLES `periodos_pago` WRITE;
+/*!40000 ALTER TABLE `periodos_pago` DISABLE KEYS */;
+INSERT INTO `periodos_pago` VALUES (2,6,'Mensual','2026-07-01','2026-07-31',7,2026),(3,6,'Mensual','2026-08-01','2026-08-31',8,2026),(4,6,'Quincenal','2026-09-01','2026-09-30',9,2026),(5,6,'Mensual','2026-10-01','2026-10-31',10,2026),(6,6,'Quincenal','2026-11-01','2026-11-30',11,2026);
+/*!40000 ALTER TABLE `periodos_pago` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `planillas`
+--
+
+DROP TABLE IF EXISTS `planillas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `planillas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `organizacion_id` int NOT NULL,
   `empleado_id` int NOT NULL,
+  `periodo_id` int NOT NULL,
   `mes` tinyint NOT NULL,
   `anio` int NOT NULL,
-  `dias_trabajados` tinyint DEFAULT '30',
+  `tipo_periodo` enum('Semanal','Quincenal','Mensual') DEFAULT 'Mensual',
+  `dias_trabajados` decimal(4,1) DEFAULT '30.0',
+  `dias_ausencia` decimal(4,1) DEFAULT '0.0',
+  `incapacidad_dias` decimal(4,1) DEFAULT '0.0',
   `horas_extras_monto` decimal(10,2) DEFAULT '0.00',
   `nocturnidad_monto` decimal(10,2) DEFAULT '0.00',
   `descuento_isss` decimal(10,2) DEFAULT '0.00',
   `descuento_afp` decimal(10,2) DEFAULT '0.00',
   `descuento_renta` decimal(10,2) DEFAULT '0.00',
+  `isss_patronal` decimal(10,2) DEFAULT '0.00',
+  `afp_patronal` decimal(10,2) DEFAULT '0.00',
   `salario_neto_pagar` decimal(10,2) NOT NULL,
-  `estado` enum('Pendiente','Pagado') DEFAULT 'Pendiente',
+  `estado` enum('Borrador','Cerrada','Pagada') DEFAULT 'Borrador',
+  `pagado_en` date DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `empleado_id` (`empleado_id`),
-  KEY `idx_planillas_org` (`organizacion_id`),
-  CONSTRAINT `planillas_mensuales_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `planillas_mensuales_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`)
+  KEY `idx_empleado_periodo` (`empleado_id`,`periodo_id`),
+  KEY `idx_organizacion_mes_anio` (`organizacion_id`,`mes`,`anio`),
+  KEY `idx_estado` (`estado`),
+  KEY `periodo_id` (`periodo_id`),
+  CONSTRAINT `planillas_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `planillas_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `planillas_ibfk_3` FOREIGN KEY (`periodo_id`) REFERENCES `periodos_pago` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `planillas_mensuales`
+-- Dumping data for table `planillas`
 --
 
-LOCK TABLES `planillas_mensuales` WRITE;
-/*!40000 ALTER TABLE `planillas_mensuales` DISABLE KEYS */;
-/*!40000 ALTER TABLE `planillas_mensuales` ENABLE KEYS */;
+LOCK TABLES `planillas` WRITE;
+/*!40000 ALTER TABLE `planillas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `planillas` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -763,7 +917,7 @@ CREATE TABLE `producto_componentes` (
   KEY `producto_componente_id` (`producto_componente_id`),
   CONSTRAINT `producto_componentes_ibfk_1` FOREIGN KEY (`producto_kit_id`) REFERENCES `productos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `producto_componentes_ibfk_2` FOREIGN KEY (`producto_componente_id`) REFERENCES `productos` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -772,6 +926,7 @@ CREATE TABLE `producto_componentes` (
 
 LOCK TABLES `producto_componentes` WRITE;
 /*!40000 ALTER TABLE `producto_componentes` DISABLE KEYS */;
+INSERT INTO `producto_componentes` VALUES (1,15,13,2.00),(2,15,7,1.00),(3,17,16,2.00),(4,17,8,1.00);
 /*!40000 ALTER TABLE `producto_componentes` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -844,7 +999,7 @@ CREATE TABLE `productos` (
   KEY `idx_productos_marca` (`marca_id`),
   KEY `idx_productos_activo` (`activo`),
   CONSTRAINT `productos_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -853,7 +1008,7 @@ CREATE TABLE `productos` (
 
 LOCK TABLES `productos` WRITE;
 /*!40000 ALTER TABLE `productos` DISABLE KEYS */;
-INSERT INTO `productos` VALUES (2,1,'Pago de Membresia','Producto de membresia',10.00,5.00,0.00,0.00,0.00,0.00,NULL,'Servicio','Unidad',NULL,NULL,'2026-07-19 22:04:37',NULL,NULL,NULL,1,NULL,NULL,0);
+INSERT INTO `productos` VALUES (2,1,'Pago de Membresia','Producto de membresia',10.00,5.00,0.00,0.00,0.00,0.00,NULL,'Servicio','Unidad',NULL,NULL,'2026-07-19 22:04:37',NULL,NULL,NULL,1,NULL,NULL,0),(3,6,'Kit/Combo (2026-07-21)','',0.00,0.00,0.00,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'','2026-07-21 20:49:39',NULL,NULL,NULL,1,NULL,NULL,1),(4,6,'Pala de Madera','Pala para usos varios',15.00,0.00,13.02,3.00,9.00,0.00,NULL,'Producto','Unidad',NULL,'SKAU','2026-07-21 21:34:31',NULL,NULL,NULL,1,1,NULL,0),(7,6,'Gaseosa 1.5Lit','',2.25,0.00,1.90,2.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'SKAU_02','2026-07-21 21:40:10',NULL,NULL,NULL,1,2,1,0),(8,6,'Coca Cola 2.5 Litros','',2.88,0.00,2.49,8.00,9.00,0.00,NULL,'Producto','Unidad',NULL,'SKIQA','2026-07-21 21:41:16',NULL,NULL,NULL,1,2,1,0),(9,6,'Colachanpan 500ml','',0.60,0.00,0.38,10.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'Kdjdjs','2026-07-21 21:42:56',NULL,NULL,NULL,1,2,2,0),(10,6,'Quesito 20 gr','',0.20,0.00,0.15,10.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'CATkd02','2026-07-21 21:47:38',NULL,NULL,NULL,1,3,3,0),(12,6,'Consumo probe','combo de sodas',0.00,0.00,0.00,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'KITCONE9909','2026-07-21 22:51:08',NULL,NULL,NULL,1,NULL,NULL,1),(13,6,'Cereal Vainilla 400gr','',4.60,0.00,3.40,10.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'CERCERO5007','2026-07-21 23:11:48',NULL,NULL,NULL,1,5,NULL,0),(14,1,'Membresia de veterinaira','',80.00,0.00,0.00,0.00,0.00,0.00,NULL,'Servicio','Unidad',NULL,'SUSMEML5445','2026-07-21 23:42:12',NULL,NULL,NULL,1,6,NULL,0),(15,6,'Desayuno','',8.70,0.00,8.70,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'SNADESL2648','2026-07-22 00:29:26',NULL,NULL,NULL,1,3,NULL,1),(16,6,'Pan Frances','',0.35,0.00,0.23,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'COMPANY5993','2026-07-22 00:47:12',NULL,NULL,NULL,1,7,NULL,0),(17,6,'Desayuno Estudiante','',2.95,0.00,2.95,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'KITDESA1169','2026-07-22 00:49:28',NULL,NULL,NULL,1,7,NULL,1),(18,6,'Semita dulce','',0.40,0.00,0.23,8.00,4.00,0.00,NULL,'Producto','Unidad',NULL,'COMSEMS7069','2026-07-22 00:53:30',NULL,NULL,NULL,1,7,NULL,0),(19,6,'Café Instantaneo','',3.60,0.00,3.49,7.00,4.00,0.00,NULL,'Producto','Unidad',NULL,'NESCAFN5103','2026-07-22 00:54:50',NULL,NULL,NULL,1,8,5,0);
 /*!40000 ALTER TABLE `productos` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -949,7 +1104,7 @@ CREATE TABLE `saas_ingresos_membresias` (
   PRIMARY KEY (`id`),
   KEY `organizacion_id` (`organizacion_id`),
   CONSTRAINT `saas_ingresos_membresias_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -958,6 +1113,7 @@ CREATE TABLE `saas_ingresos_membresias` (
 
 LOCK TABLES `saas_ingresos_membresias` WRITE;
 /*!40000 ALTER TABLE `saas_ingresos_membresias` DISABLE KEYS */;
+INSERT INTO `saas_ingresos_membresias` VALUES (1,4,22.60,7,2026,'2026-07-21 13:48:10',NULL),(2,4,11.30,7,2026,'2026-07-21 13:48:12',NULL);
 /*!40000 ALTER TABLE `saas_ingresos_membresias` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -994,6 +1150,37 @@ LOCK TABLES `usuarios` WRITE;
 INSERT INTO `usuarios` VALUES (1,1,'SuperAdmin','superadmin@localhost.com','$2b$10$wgjSORjigZ8/CINJQoiCLu3lR4M5o9VCFSwWx0eVpVgCdEiG/5N/C','SUPER_ADMIN','Activo',0,'2026-07-17 19:19:30'),(2,4,'prueba01','prueba01@gmail.com','$2b$10$D.xMKwZVn8NjMaQq1PtvQ.hYMgKQbWhZP8d7J2l7SODTOB/XfPKGq','Admin','Inactivo',0,'2026-07-17 19:19:30'),(3,NULL,'Walter Padilla','waly04padilla@gmail.com','$2b$10$yrGmKjB.FFwT2QMFSCVikefSzOaYA54GKPtHJsSUUJza6cyfH9oJC','SUPER_ADMIN','Inactivo',0,'2026-07-17 19:26:39'),(4,5,'Yadiel','prueba0102@gmail.com','$2b$10$g/XH6iQFL1WjOmPx.Rixd.4p2osDOFQJn1JP8RoTPBmN85fBA6dC2','Admin','Activo',0,'2026-07-18 05:15:29'),(5,5,'walter Padilla','walkag@gmail.com','$2b$10$jn2.fy6T7WHVcsgPJenGwu.0ddlokYxvC99u.kgcbe6mMRNg554mO','Contador','Activo',0,'2026-07-18 05:20:05'),(6,5,'juancho','ddfd@localhost.com','$2b$10$8wF/TdZeuO5nRKLCWtoVLOa1m.UASvU/noue1MdNjoOpDxyqRk2.u','Vendedor','Activo',0,'2026-07-18 08:55:49'),(7,6,'Juan Valdez','ddff@dospinos.com','$2b$10$QqcIGgWG4umR776Se.nnDuY4NDA.eV.CWvf3vs.9phPlp6T5otroO','Admin','Activo',0,'2026-07-19 03:15:42'),(8,6,'sdssdds','wlsj@gmail.com','$2b$10$/D1W/171i3epyrWqluSKYuy2.MSQGxAF24LDyy3CCuw6uYT/H58QC','Vendedor','Activo',0,'2026-07-19 05:17:05'),(9,2,'dhfhd','superl@gmil.com','$2b$10$8YejWISQCW7obaaNMGHaQu3LvRO7ohmrKmkUfigj5JdNse5/hIQz2','Vendedor','Activo',0,'2026-07-19 05:20:48'),(10,1,'Walter Padilla','mapate@dospinos.com','$2b$10$L1mnAJgbVIyfhsN5zh97q.tAKUqjj4vYW9ufE2YcjyCwRNgTe1xoa','SUPER_ADMIN','Activo',0,'2026-07-19 06:48:42');
 /*!40000 ALTER TABLE `usuarios` ENABLE KEYS */;
 UNLOCK TABLES;
+
+--
+-- Table structure for table `vacaciones`
+--
+
+DROP TABLE IF EXISTS `vacaciones`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `vacaciones` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `empleado_id` int NOT NULL,
+  `fecha_inicio` date NOT NULL,
+  `fecha_fin` date NOT NULL,
+  `dias_tomados` decimal(4,1) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_empleado_fechas` (`empleado_id`,`fecha_inicio`),
+  KEY `organizacion_id` (`organizacion_id`),
+  CONSTRAINT `vacaciones_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`),
+  CONSTRAINT `vacaciones_ibfk_2` FOREIGN KEY (`empleado_id`) REFERENCES `empleados_nomina` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `vacaciones`
+--
+
+LOCK TABLES `vacaciones` WRITE;
+/*!40000 ALTER TABLE `vacaciones` DISABLE KEYS */;
+/*!40000 ALTER TABLE `vacaciones` ENABLE KEYS */;
+UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -1004,4 +1191,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-07-20 20:07:43
+-- Dump completed on 2026-07-23 22:31:47

@@ -2,79 +2,145 @@
 const { pool } = require('../config/db');
 
 class Producto {
+  
   static async findAll(organizacion_id, filters = {}) {
-    let sql = `
-      SELECT p.*, 
-        (SELECT COUNT(*) FROM movimientos_inventario m 
-         WHERE m.producto_id = p.id AND m.tipo_movimiento = 'Entrada') AS total_entradas,
-        (SELECT COUNT(*) FROM movimientos_inventario m 
-         WHERE m.producto_id = p.id AND m.tipo_movimiento = 'Salida') AS total_salidas,
-        GROUP_CONCAT(DISTINCT e.nombre) AS etiquetas,
-        GROUP_CONCAT(DISTINCT e.color) AS etiquetas_colores,
-        c.nombre AS categoria_nombre,
-        m.nombre AS marca_nombre
-      FROM productos p
-      LEFT JOIN producto_etiquetas pe ON p.id = pe.producto_id
-      LEFT JOIN etiquetas e ON pe.etiqueta_id = e.id
-      LEFT JOIN categorias c ON p.categoria_id = c.id
-      LEFT JOIN marcas m ON p.marca_id = m.id
-      WHERE p.organizacion_id = ? AND p.activo = 1
-    `;
-    const params = [organizacion_id];
+  const {
+    search = '',
+    tipo = '',
+    estado_stock = '',
+    categoria_id = '',
+    marca_id = '',
+    es_kit = '',
+    incluir_desactivados = false,
+    page = 1,
+    limit = 12,
+  } = filters;
 
-    if (filters.nombre) {
-      sql += ' AND p.nombre LIKE ?';
-      params.push(`%${filters.nombre}%`);
-    }
-    if (filters.codigo_sku) {
-      sql += ' AND p.codigo_sku LIKE ?';
-      params.push(`%${filters.codigo_sku}%`);
-    }
-    if (filters.codigo_barras) {
-      sql += ' AND p.codigo_barras LIKE ?';
-      params.push(`%${filters.codigo_barras}%`);
-    }
-    if (filters.tipo) {
-      sql += ' AND p.tipo = ?';
-      params.push(filters.tipo);
-    }
-    if (filters.categoria_id) {
-      sql += ' AND p.categoria_id = ?';
-      params.push(filters.categoria_id);
-    }
-    if (filters.marca_id) {
-      sql += ' AND p.marca_id = ?';
-      params.push(filters.marca_id);
-    }
-    if (filters.estado_stock) {
-      if (filters.estado_stock === 'agotados') {
-        sql += ' AND p.stock_actual <= 0';
-      } else if (filters.estado_stock === 'minimo') {
-        sql += ' AND p.stock_actual <= p.stock_minimo AND p.stock_actual > 0';
-      } else if (filters.estado_stock === 'con_existencias') {
-        sql += ' AND p.stock_actual > 0';
-      }
-    }
-    if (filters.es_kit !== undefined) {
-      sql += ' AND p.es_kit = ?';
-      params.push(filters.es_kit);
-    }
+  const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    sql += ' GROUP BY p.id ORDER BY p.nombre ASC';
-    const [rows] = await pool.query(sql, params);
-    return rows;
+  let sql = `
+    SELECT p.*,
+      c.nombre AS categoria_nombre,
+      m.nombre AS marca_nombre,
+      GROUP_CONCAT(DISTINCT e.nombre) AS etiquetas
+    FROM productos p
+    LEFT JOIN categorias c ON p.categoria_id = c.id
+    LEFT JOIN marcas m ON p.marca_id = m.id
+    LEFT JOIN producto_etiquetas pe ON p.id = pe.producto_id
+    LEFT JOIN etiquetas e ON pe.etiqueta_id = e.id
+    WHERE p.organizacion_id = ?
+  `;
+  const params = [organizacion_id];
+
+  // Filtro de activo: si no se incluyen desactivados, solo activos
+  if (!incluir_desactivados) {
+    sql += ` AND p.activo = 1`;
   }
+  // Si incluir_desactivados es true, no filtramos por activo (mostramos todos)
+
+  if (search) {
+    sql += ` AND (p.nombre LIKE ? OR p.codigo_sku LIKE ? OR p.codigo_barras LIKE ?)`;
+    const searchParam = `%${search}%`;
+    params.push(searchParam, searchParam, searchParam);
+  }
+  if (tipo) {
+    sql += ` AND p.tipo = ?`;
+    params.push(tipo);
+  }
+  if (estado_stock) {
+    if (estado_stock === 'agotados') {
+      sql += ` AND p.stock_actual <= 0`;
+    } else if (estado_stock === 'minimo') {
+      sql += ` AND p.stock_actual <= p.stock_minimo AND p.stock_actual > 0`;
+    } else if (estado_stock === 'con_existencias') {
+      sql += ` AND p.stock_actual > 0`;
+    }
+  }
+  if (categoria_id) {
+    sql += ` AND p.categoria_id = ?`;
+    params.push(categoria_id);
+  }
+  if (marca_id) {
+    sql += ` AND p.marca_id = ?`;
+    params.push(marca_id);
+  }
+  if (es_kit !== '' && es_kit !== undefined) {
+    sql += ` AND p.es_kit = ?`;
+    params.push(es_kit === 'true' ? 1 : 0);
+  }
+
+  sql += ` GROUP BY p.id ORDER BY p.nombre ASC LIMIT ? OFFSET ?`;
+  params.push(parseInt(limit), offset);
+
+  const [rows] = await pool.query(sql, params);
+
+  // Contar total
+  let countSql = `
+    SELECT COUNT(DISTINCT p.id) AS total
+    FROM productos p
+    WHERE p.organizacion_id = ?
+  `;
+  const countParams = [organizacion_id];
+
+  if (!incluir_desactivados) {
+    countSql += ` AND p.activo = 1`;
+  }
+
+  if (search) {
+    countSql += ` AND (p.nombre LIKE ? OR p.codigo_sku LIKE ? OR p.codigo_barras LIKE ?)`;
+    const searchParam = `%${search}%`;
+    countParams.push(searchParam, searchParam, searchParam);
+  }
+  if (tipo) {
+    countSql += ` AND p.tipo = ?`;
+    countParams.push(tipo);
+  }
+  if (estado_stock) {
+    if (estado_stock === 'agotados') {
+      countSql += ` AND p.stock_actual <= 0`;
+    } else if (estado_stock === 'minimo') {
+      countSql += ` AND p.stock_actual <= p.stock_minimo AND p.stock_actual > 0`;
+    } else if (estado_stock === 'con_existencias') {
+      countSql += ` AND p.stock_actual > 0`;
+    }
+  }
+  if (categoria_id) {
+    countSql += ` AND p.categoria_id = ?`;
+    countParams.push(categoria_id);
+  }
+  if (marca_id) {
+    countSql += ` AND p.marca_id = ?`;
+    countParams.push(marca_id);
+  }
+  if (es_kit !== '' && es_kit !== undefined) {
+    countSql += ` AND p.es_kit = ?`;
+    countParams.push(es_kit === 'true' ? 1 : 0);
+  }
+
+  const [countResult] = await pool.query(countSql, countParams);
+  const total = countResult[0]?.total || 0;
+
+  return {
+    productos: rows,
+    total,
+    page: parseInt(page),
+    limit: parseInt(limit),
+    totalPages: Math.ceil(total / parseInt(limit)),
+  };
+}
+
 
   static async findById(id, organizacion_id) {
     const [rows] = await pool.query(
-      `SELECT p.*, c.nombre AS categoria_nombre, m.nombre AS marca_nombre,
-        GROUP_CONCAT(DISTINCT e.nombre) AS etiquetas,
-        GROUP_CONCAT(DISTINCT e.color) AS etiquetas_colores
+      `SELECT p.*, 
+        c.nombre AS categoria_nombre, 
+        m.nombre AS marca_nombre,
+        GROUP_CONCAT(DISTINCT e.nombre) AS etiquetas
        FROM productos p
-       LEFT JOIN producto_etiquetas pe ON p.id = pe.producto_id
-       LEFT JOIN etiquetas e ON pe.etiqueta_id = e.id
        LEFT JOIN categorias c ON p.categoria_id = c.id
        LEFT JOIN marcas m ON p.marca_id = m.id
+       LEFT JOIN producto_etiquetas pe ON p.id = pe.producto_id
+       LEFT JOIN etiquetas e ON pe.etiqueta_id = e.id
        WHERE p.id = ? AND p.organizacion_id = ?
        GROUP BY p.id`,
       [id, organizacion_id]
@@ -85,55 +151,66 @@ class Producto {
   static async create(data) {
     const {
       organizacion_id, nombre, descripcion, precio_unitario,
-      costo_unitario, stock_actual, stock_minimo, stock_maximo,
-      tipo, unidad_medida, codigo_barras, codigo_sku,
-      ubicacion, peso, dimensiones, imagen_url,
-      categoria_id, marca_id, es_kit = false
+      costo_promedio, stock_actual, stock_minimo,
+      tipo, codigo_sku, categoria_id, marca_id,
+      es_kit = false
     } = data;
+
     const [result] = await pool.query(
       `INSERT INTO productos 
-       (organizacion_id, nombre, descripcion, precio_unitario, costo_unitario,
-        stock_actual, stock_minimo, stock_maximo, tipo, unidad_medida,
-        codigo_barras, codigo_sku, ubicacion, peso, dimensiones, imagen_url,
+       (organizacion_id, nombre, descripcion, precio_unitario, costo_promedio,
+        stock_actual, stock_minimo, tipo, codigo_sku,
         categoria_id, marca_id, es_kit, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      [organizacion_id, nombre, descripcion, precio_unitario, costo_unitario,
-       stock_actual || 0, stock_minimo || 0, stock_maximo || 0,
-       tipo || 'Producto', unidad_medida || 'Unidad',
-       codigo_barras, codigo_sku, ubicacion, peso, dimensiones, imagen_url,
-       categoria_id, marca_id, es_kit]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [
+        organizacion_id, nombre, descripcion || '',
+        precio_unitario || 0, costo_promedio || 0,
+        stock_actual || 0, stock_minimo || 0,
+        tipo || 'Producto', codigo_sku || '',
+        categoria_id || null, marca_id || null,
+        es_kit
+      ]
     );
     return result.insertId;
   }
 
   static async update(id, organizacion_id, data) {
     const {
-      nombre, descripcion, precio_unitario, costo_unitario,
-      stock_actual, stock_minimo, stock_maximo, tipo, unidad_medida,
-      codigo_barras, codigo_sku, ubicacion, peso, dimensiones, imagen_url,
+      nombre, descripcion, precio_unitario, costo_promedio,
+      stock_actual, stock_minimo, tipo, codigo_sku,
       categoria_id, marca_id, es_kit, activo
     } = data;
+
     const [result] = await pool.query(
       `UPDATE productos SET
-        nombre = ?, descripcion = ?, precio_unitario = ?, costo_unitario = ?,
-        stock_actual = ?, stock_minimo = ?, stock_maximo = ?,
-        tipo = ?, unidad_medida = ?, codigo_barras = ?, codigo_sku = ?,
-        ubicacion = ?, peso = ?, dimensiones = ?, imagen_url = ?,
+        nombre = ?, descripcion = ?, precio_unitario = ?, costo_promedio = ?,
+        stock_actual = ?, stock_minimo = ?, tipo = ?, codigo_sku = ?,
         categoria_id = ?, marca_id = ?, es_kit = ?, activo = ?
        WHERE id = ? AND organizacion_id = ?`,
-      [nombre, descripcion, precio_unitario, costo_unitario,
-       stock_actual, stock_minimo, stock_maximo,
-       tipo, unidad_medida, codigo_barras, codigo_sku,
-       ubicacion, peso, dimensiones, imagen_url,
-       categoria_id, marca_id, es_kit, activo,
-       id, organizacion_id]
+      [
+        nombre, descripcion || '', precio_unitario || 0, costo_promedio || 0,
+        stock_actual || 0, stock_minimo || 0,
+        tipo || 'Producto', codigo_sku || '',
+        categoria_id || null, marca_id || null,
+        es_kit || false, activo !== undefined ? activo : 1,
+        id, organizacion_id
+      ]
     );
     return result.affectedRows > 0;
   }
 
+
   static async delete(id, organizacion_id) {
     const [result] = await pool.query(
-      'DELETE FROM productos WHERE id = ? AND organizacion_id = ?',
+      'UPDATE productos SET activo = 0 WHERE id = ? AND organizacion_id = ?',
+      [id, organizacion_id]
+    );
+    return result.affectedRows > 0;
+  }
+
+  static async reactivar(id, organizacion_id) {
+    const [result] = await pool.query(
+      'UPDATE productos SET activo = 1 WHERE id = ? AND organizacion_id = ?',
       [id, organizacion_id]
     );
     return result.affectedRows > 0;
@@ -155,7 +232,7 @@ class Producto {
 
   static async getProductosConBajoStock(organizacion_id) {
     const [rows] = await pool.query(
-      'SELECT * FROM productos WHERE organizacion_id = ? AND stock_actual <= stock_minimo AND stock_actual > 0',
+      'SELECT * FROM productos WHERE organizacion_id = ? AND stock_actual <= stock_minimo AND stock_actual > 0 AND activo = 1',
       [organizacion_id]
     );
     return rows;
@@ -163,7 +240,7 @@ class Producto {
 
   static async getProductosAgotados(organizacion_id) {
     const [rows] = await pool.query(
-      'SELECT * FROM productos WHERE organizacion_id = ? AND stock_actual <= 0',
+      'SELECT * FROM productos WHERE organizacion_id = ? AND stock_actual <= 0 AND activo = 1',
       [organizacion_id]
     );
     return rows;

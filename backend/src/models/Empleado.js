@@ -3,19 +3,66 @@ const { pool } = require('../config/db');
 
 class Empleado {
   static async findAll(organizacion_id, filters = {}) {
-    let sql = 'SELECT * FROM empleados_nomina WHERE organizacion_id = ?';
+    const {
+      search = '',
+      activo = null,
+      page = 1,
+      limit = 10,
+    } = filters;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let sql = `
+      SELECT e.*
+      FROM empleados_nomina e
+      WHERE e.organizacion_id = ?
+    `;
     const params = [organizacion_id];
-    if (filters.nombre) {
-      sql += ' AND nombre LIKE ?';
-      params.push(`%${filters.nombre}%`);
+
+    if (search) {
+      sql += ` AND (e.nombre LIKE ? OR e.apellidos LIKE ? OR e.dui LIKE ?)`;
+      const searchParam = `%${search}%`;
+      params.push(searchParam, searchParam, searchParam);
     }
-    if (filters.dui) {
-      sql += ' AND dui = ?';
-      params.push(filters.dui);
+
+    if (activo !== null) {
+      sql += ` AND e.activo = ?`;
+      params.push(activo ? 1 : 0);
     }
-    sql += ' ORDER BY nombre ASC';
+
+    sql += ` ORDER BY e.nombre ASC, e.apellidos ASC LIMIT ? OFFSET ?`;
+    params.push(parseInt(limit), offset);
+
     const [rows] = await pool.query(sql, params);
-    return rows;
+
+    // Contar total
+    let countSql = `
+      SELECT COUNT(*) AS total
+      FROM empleados_nomina e
+      WHERE e.organizacion_id = ?
+    `;
+    const countParams = [organizacion_id];
+
+    if (search) {
+      countSql += ` AND (e.nombre LIKE ? OR e.apellidos LIKE ? OR e.dui LIKE ?)`;
+      countParams.push(searchParam, searchParam, searchParam);
+    }
+
+    if (activo !== null) {
+      countSql += ` AND e.activo = ?`;
+      countParams.push(activo ? 1 : 0);
+    }
+
+    const [countResult] = await pool.query(countSql, countParams);
+    const total = countResult[0]?.total || 0;
+
+    return {
+      empleados: rows,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(total / parseInt(limit)),
+    };
   }
 
   static async findById(id, organizacion_id) {
@@ -28,39 +75,50 @@ class Empleado {
 
   static async create(data) {
     const {
-      organizacion_id, nombre, salario_base, dui,
+      organizacion_id, nombre, apellidos, salario_base, dui,
       cotiza_isss = 1, cotiza_afp = 1,
-      afp_numero, isss_numero
+      afp_numero, isss_numero,
+      tipo_periodo = 'Mensual' // Nuevo campo
     } = data;
     const [result] = await pool.query(
       `INSERT INTO empleados_nomina 
-       (organizacion_id, nombre, salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [organizacion_id, nombre, salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero]
+       (organizacion_id, nombre, apellidos, salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, tipo_periodo, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [organizacion_id, nombre, apellidos || '', salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, tipo_periodo]
     );
     return result.insertId;
   }
 
   static async update(id, organizacion_id, data) {
     const {
-      nombre, salario_base, dui,
+      nombre, apellidos, salario_base, dui,
       cotiza_isss, cotiza_afp,
-      afp_numero, isss_numero
+      afp_numero, isss_numero,
+      tipo_periodo
     } = data;
     const [result] = await pool.query(
       `UPDATE empleados_nomina SET
-        nombre = ?, salario_base = ?, dui = ?,
+        nombre = ?, apellidos = ?, salario_base = ?, dui = ?,
         cotiza_isss = ?, cotiza_afp = ?,
-        afp_numero = ?, isss_numero = ?
+        afp_numero = ?, isss_numero = ?,
+        tipo_periodo = ?
        WHERE id = ? AND organizacion_id = ?`,
-      [nombre, salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, id, organizacion_id]
+      [nombre, apellidos || '', salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, tipo_periodo, id, organizacion_id]
     );
     return result.affectedRows > 0;
   }
 
   static async delete(id, organizacion_id) {
     const [result] = await pool.query(
-      'DELETE FROM empleados_nomina WHERE id = ? AND organizacion_id = ?',
+      'UPDATE empleados_nomina SET activo = 0 WHERE id = ? AND organizacion_id = ?',
+      [id, organizacion_id]
+    );
+    return result.affectedRows > 0;
+  }
+
+  static async reactivar(id, organizacion_id) {
+    const [result] = await pool.query(
+      'UPDATE empleados_nomina SET activo = 1 WHERE id = ? AND organizacion_id = ?',
       [id, organizacion_id]
     );
     return result.affectedRows > 0;

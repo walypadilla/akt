@@ -5,28 +5,22 @@ import apiClient from './config';
 // BODEGAS / SUCURSALES
 // ============================================================
 
-export const getBodegas = async (params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  const response = await apiClient.get(`/inventario/bodegas?${query}`);
+export const getBodegas = async () => {
+  const response = await apiClient.get('/inventario/bodegas');
   return response.data;
 };
 
-export const getBodega = async (id) => {
-  const response = await apiClient.get(`/inventario/bodegas/${id}`);
-  return response.data;
-};
-
-export const createBodega = async (data) => {
+export const createWarehouse = async (data) => {
   const response = await apiClient.post('/inventario/bodegas', data);
   return response.data;
 };
 
-export const updateBodega = async (id, data) => {
+export const updateWarehouse = async (id, data) => {
   const response = await apiClient.put(`/inventario/bodegas/${id}`, data);
   return response.data;
 };
 
-export const deleteBodega = async (id) => {
+export const deleteWarehouse = async (id) => {
   const response = await apiClient.delete(`/inventario/bodegas/${id}`);
   return response.data;
 };

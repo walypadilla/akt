@@ -31,7 +31,9 @@ class DetalleFactura {
         [factura_id]
     );
     return rows;
+  }
 }
-}
+
+
 
 module.exports = DetalleFactura;

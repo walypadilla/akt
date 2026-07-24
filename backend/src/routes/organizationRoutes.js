@@ -48,15 +48,36 @@ router.get('/empleados', empleadoController.obtenerEmpleados);
 router.get('/empleados/:id', empleadoController.obtenerEmpleadoPorId);
 router.post('/empleados', empleadoController.crearEmpleado);
 router.put('/empleados/:id', empleadoController.actualizarEmpleado);
-router.delete('/empleados/:id', empleadoController.eliminarEmpleado);
+router.put('/empleados/:id/desactivar', empleadoController.desactivarEmpleado);
+router.put('/empleados/:id/reactivar', empleadoController.reactivarEmpleado);
+router.get('/empleados/exportar', empleadoController.exportarEmpleados);
+
 
 // ========== PLANILLAS ==========
 router.get('/planillas', planillaController.obtenerPlanillas);
-router.post('/planillas/calcular', planillaController.calcularPlanilla);
-router.put('/planillas/:id', planillaController.actualizarPlanilla);
-router.delete('/planillas/:id', planillaController.eliminarPlanilla);
-
-// ========== RUTA ADICIONAL: PLANILLA MASIVA ==========
+router.post('/planillas/individual', planillaController.generarPlanillaIndividual);
 router.post('/planillas/masiva', planillaController.generarPlanillaMasiva);
+router.put('/planillas/:id/estado', planillaController.cambiarEstadoPlanilla);
+router.delete('/planillas/:id', planillaController.eliminarPlanilla);
+router.get('/planillas/exportar', planillaController.exportarPlanillas);
+router.get('/planillas/:id/pdf', planillaController.generarBoletaPDF);
+router.get('/planillas/anios', planillaController.getAniosDisponibles);
+router.put('/planillas/multiple/estado', planillaController.cambiarEstadoMultiple);
+
+// ========== AGUINALDOS Y VACACIONES ==========
+router.post('/planillas/aguinaldos', planillaController.generarAguinaldos);
+router.post('/planillas/vacaciones', planillaController.generarVacaciones);
+
+// AUSENCIAS
+router.post('/ausencias', planillaController.crearAusencia);
+router.get('/ausencias', planillaController.obtenerAusencias);
+router.delete('/ausencias/:id', planillaController.eliminarAusencia);
+router.get('/ausencias/exportar', planillaController.exportarAusencias);
+
+// HORAS EXTRAS
+router.post('/horas-extras', planillaController.crearHoraExtra);
+router.get('/horas-extras', planillaController.obtenerHorasExtras);
+router.delete('/horas-extras/:id', planillaController.eliminarHoraExtra);
+router.get('/horas-extras/exportar', planillaController.exportarHorasExtras);
 
 module.exports = router;
