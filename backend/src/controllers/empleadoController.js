@@ -7,7 +7,6 @@ exports.obtenerEmpleados = async (req, res) => {
     const organizacion_id = req.organizacion_id;
     const { search, activo, page = 1, limit = 10 } = req.query;
 
-    // `activo` puede ser 'true', 'false', o undefined (todos)
     let activoFiltro = null;
     if (activo === 'true') activoFiltro = true;
     else if (activo === 'false') activoFiltro = false;
@@ -127,9 +126,6 @@ exports.reactivarEmpleado = async (req, res) => {
   }
 };
 
-// ============================================================
-// EXPORTAR EMPLEADOS A CSV
-// ============================================================
 exports.exportarEmpleados = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
@@ -139,16 +135,14 @@ exports.exportarEmpleados = async (req, res) => {
     if (activo === 'true') activoFiltro = true;
     else if (activo === 'false') activoFiltro = false;
 
-    // Obtener todos los empleados (sin paginación)
     const result = await Empleado.findAll(organizacion_id, {
       search,
       activo: activoFiltro,
       page: 1,
-      limit: 99999, // número grande para obtener todos
+      limit: 99999,
     });
 
     const empleados = result.empleados || [];
-
     if (empleados.length === 0) {
       return res.status(404).json({ message: 'No hay empleados para exportar' });
     }
@@ -162,14 +156,14 @@ exports.exportarEmpleados = async (req, res) => {
       'ISSS Número': e.isss_numero || '',
       'Cotiza ISSS': e.cotiza_isss ? 'Sí' : 'No',
       'Cotiza AFP': e.cotiza_afp ? 'Sí' : 'No',
+      'Fecha Ingreso': e.fecha_ingreso ? new Date(e.fecha_ingreso).toLocaleDateString('es-SV') : '',
       'Estado': e.activo === 1 ? 'Activo' : 'Inactivo',
     }));
 
     const headers = Object.keys(data[0]);
-    let csv = '\uFEFF'; // BOM para caracteres especiales
-    csv += 'sep=;\n';   // Truco para Excel
+    let csv = '\uFEFF';
+    csv += 'sep=;\n';
     csv += headers.join(';') + '\n';
-
     for (const row of data) {
       csv += headers.map(h => {
         let val = row[h] !== undefined && row[h] !== null ? row[h] : '';

@@ -1198,8 +1198,6 @@ exports.obtenerFacturasEmitidasGlobal = async (req, res) => {
 
 exports.generarFacturaMembresia = async (req, res) => {
   try {
-    console.log('📌 [FACTURA] Iniciando generación de factura de membresía');
-    console.log('📌 [FACTURA] Body recibido:', JSON.stringify(req.body, null, 2));
 
     const { organizacion_id, detalles } = req.body;
 
@@ -1236,10 +1234,7 @@ exports.generarFacturaMembresia = async (req, res) => {
 
       if (result.insertId) {
         cliente_id = result.insertId;
-        console.log('✅ [FACTURA] Cliente creado, ID:', cliente_id);
       } else {
-        // Si no se insertó, recuperar existente
-        console.log('⚠️ [FACTURA] Duplicado detectado, recuperando cliente existente...');
         const [existing] = await pool.query(
           'SELECT id FROM clientes WHERE organizacion_id = ? AND nit = ?',
           [organizacion_id, nitCliente]
@@ -1300,8 +1295,6 @@ exports.generarFacturaMembresia = async (req, res) => {
       });
     }
 
-    console.log(`📌 [FACTURA] Subtotal: $${subtotal.toFixed(2)}`);
-
     // ========== 6. GENERAR NÚMERO CORRELATIVO ==========
     const [count] = await pool.query(
       `SELECT COUNT(*) AS total FROM facturas 
@@ -1338,12 +1331,10 @@ exports.generarFacturaMembresia = async (req, res) => {
       ]
     );
     const factura_id = facturaResult.insertId;
-    console.log('✅ [FACTURA] Factura insertada, ID:', factura_id);
 
     // ========== 9. INSERTAR DETALLES DE FACTURA ==========
     const detalleModel = require('../models/DetalleFactura');
     await detalleModel.createMany(factura_id, detallesValidos);
-    console.log('✅ [FACTURA] Detalles insertados');
 
     // ========== 10. ACTIVAR ORGANIZACIÓN ==========
     await pool.query(
@@ -1428,9 +1419,6 @@ exports.descargarPDFFactura = async (req, res) => {
       correo: 'info@misaas.com',
       logo_url: ''
     };
-
-    // Usamos el archivo externo auxiliar que ya importaste arriba en el archivo
-    // const numeroALetras = require('../utils/numeroALetras');
 
     // 4. Generar PDF con PDFKit
     const PDFDocument = require('pdfkit');

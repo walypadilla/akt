@@ -247,7 +247,7 @@ const Productos = () => {
     }
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (loading && productos.length === 0) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={loadData} />;
 
   const { total, page, totalPages } = paginacion;

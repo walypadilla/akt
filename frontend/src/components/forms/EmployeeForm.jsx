@@ -11,7 +11,6 @@ const EmployeeForm = ({ initialData = {}, onSubmit, onCancel, loading }) => {
     cotiza_afp: initialData.cotiza_afp !== undefined ? initialData.cotiza_afp : true,
     afp_numero: initialData.afp_numero || '',
     isss_numero: initialData.isss_numero || '',
-    tipo_periodo: initialData.tipo_periodo || 'Mensual',
     fecha_ingreso: initialData.fecha_ingreso ? initialData.fecha_ingreso.split('T')[0] : '',
   });
 
@@ -158,21 +157,6 @@ const EmployeeForm = ({ initialData = {}, onSubmit, onCancel, loading }) => {
           />
           Cotiza AFP
         </label>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Tipo de Período de Pago</label>
-        <select
-          name="tipo_periodo"
-          value={formData.tipo_periodo}
-          onChange={handleChange}
-          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-        >
-          <option value="Mensual">Mensual</option>
-          <option value="Quincenal">Quincenal</option>
-          <option value="Semanal">Semanal</option>
-        </select>
-        <p className="text-xs text-gray-400 mt-1">Define cómo se calcularán los pagos y descuentos.</p>
       </div>
 
       <div>

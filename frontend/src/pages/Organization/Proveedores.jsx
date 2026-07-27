@@ -1,31 +1,108 @@
 // frontend/src/pages/organization/Proveedores.jsx
-import React, { useState, useEffect } from 'react';
-import { getProveedores, createProveedor, updateProveedor, deleteProveedor } from '../../api/proveedores';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  getProveedores,
+  createProveedor,
+  updateProveedor,
+  deleteProveedor,
+  reactivarProveedor,
+  exportarTodosProveedores,
+  exportarProveedoresFiltrados,
+  generarProveedorPDF,
+} from '../../api/proveedores';
+import { getDepartamentos, getActividades } from '../../api/catalogos';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import ProveedorForm from '../../components/forms/ProveedorForm';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import { getTodayLocal } from '../../utils/dateUtils';
 import { toast } from 'react-toastify';
+import {
+  Download,
+  Plus,
+  Edit3,
+  Trash2,
+  Filter,
+  Search,
+  X,
+  RotateCcw,
+  Users,
+  UserCheck,
+  UserX,
+  FileText,
+} from 'lucide-react';
 
 const Proveedores = () => {
   const [proveedores, setProveedores] = useState([]);
+  const [paginacion, setPaginacion] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  const tableRef = useRef(null);
+  const [scrollPosition, setScrollPosition] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Estados de conteo (sin filtros)
+  const [totales, setTotales] = useState({ activos: 0, inactivos: 0 });
+
+  const [filtros, setFiltros] = useState({
+    razon_social: '',
+    nombre_comercial: '',
+    numero_documento: '',
+    tipo_documento: '',
+    codigo_giro: '',
+    tipo_contribuyente: '',
+    activo: 'true', 
+    page: 1,
+    limit: 10,
+  });
+
+  const [filtrosTemp, setFiltrosTemp] = useState({ ...filtros });
+
+  const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
 
-  const fetchData = async () => {
+  const [actividades, setActividades] = useState([]);
+  const [departamentos, setDepartamentos] = useState([]);
+
+  useEffect(() => {
+    const loadCatalogos = async () => {
+      try {
+        const [acts, deptos] = await Promise.all([
+          getActividades(),
+          getDepartamentos(),
+        ]);
+        setActividades(acts || []);
+        setDepartamentos(deptos || []);
+      } catch (error) {
+        console.error('Error cargando catálogos:', error);
+      }
+    };
+    loadCatalogos();
+  }, []);
+
+  const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = searchTerm ? `nombre=${encodeURIComponent(searchTerm)}` : '';
+      const params = { ...filtros };
+      
+      if (params.activo === '') delete params.activo;
       const data = await getProveedores(params);
-      setProveedores(data);
+      setProveedores(data.proveedores || []);
+      setPaginacion({
+        total: data.total || 0,
+        page: data.page || 1,
+        limit: data.limit || 10,
+        totalPages: data.totalPages || 1,
+      });
+      setTotales({
+        activos: data.totalActivos || 0,
+        inactivos: data.totalInactivos || 0,
+      });
     } catch (err) {
+      console.error('Error loading proveedores:', err);
       setError(err.message || 'Error al cargar proveedores');
       toast.error('Error al cargar proveedores');
     } finally {
@@ -34,9 +111,113 @@ const Proveedores = () => {
   };
 
   useEffect(() => {
-    fetchData();
-  }, [searchTerm]);
+    loadData();
+  }, [
+    filtros.page,
+    filtros.razon_social,
+    filtros.nombre_comercial,
+    filtros.numero_documento,
+    filtros.tipo_documento,
+    filtros.codigo_giro,
+    filtros.tipo_contribuyente,
+    filtros.activo,
+  ]);
 
+  useEffect(() => {
+    if (!loading && tableRef.current && scrollPosition > 0) {
+      requestAnimationFrame(() => {
+        if (tableRef.current) tableRef.current.scrollTop = scrollPosition;
+      });
+    }
+  }, [loading, proveedores]);
+
+  const aplicarFiltros = () => {
+    if (tableRef.current) setScrollPosition(tableRef.current.scrollTop);
+    setFiltros({ ...filtrosTemp, page: 1 });
+    setShowFilters(false);
+  };
+
+  const cancelarFiltros = () => {
+    setFiltrosTemp({ ...filtros });
+    setShowFilters(false);
+  };
+
+  const limpiarFiltros = () => {
+    const filtrosLimpios = {
+      razon_social: '',
+      nombre_comercial: '',
+      numero_documento: '',
+      tipo_documento: '',
+      codigo_giro: '',
+      tipo_contribuyente: '',
+      activo: 'true',
+      page: 1,
+      limit: 10,
+    };
+    setFiltros(filtrosLimpios);
+    setFiltrosTemp(filtrosLimpios);
+    if (tableRef.current) setScrollPosition(0);
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      aplicarFiltros();
+    }
+  };
+
+  const getTablaTitle = () => {
+    const partes = [];
+    if (filtros.razon_social) partes.push(`🔍 "${filtros.razon_social}"`);
+    if (filtros.nombre_comercial) partes.push(`Nombre: ${filtros.nombre_comercial}`);
+    if (filtros.tipo_documento) partes.push(`Tipo: ${filtros.tipo_documento}`);
+    if (filtros.numero_documento) partes.push(`N° Documento: ${filtros.numero_documento}`);
+    if (filtros.codigo_giro) {
+      const act = actividades.find(a => a.codigo_giro === filtros.codigo_giro);
+      if (act) partes.push(`Giro: ${act.descripcion_giro}`);
+    }
+    if (filtros.tipo_contribuyente) partes.push(`Contribuyente: ${filtros.tipo_contribuyente}`);
+    if (filtros.activo === 'true') partes.push('✅ Activos');
+    if (filtros.activo === 'false') partes.push('🚫 Inactivos');
+    if (partes.length === 0) return 'Todos los proveedores registrados';
+    return `Filtrado por: ${partes.join(' | ')}`;
+  };
+
+  // Exportar
+  const handleExportarTodos = async () => {
+    try {
+      const blob = await exportarTodosProveedores();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `proveedores_todos_${getTodayLocal()}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Todos los proveedores exportados');
+    } catch (err) {
+      toast.error(err.message || 'Error al exportar');
+    }
+  };
+
+  const handleExportarFiltrados = async () => {
+    try {
+      const params = { ...filtros };
+      delete params.page;
+      delete params.limit;
+      if (params.activo === '') delete params.activo;
+      const blob = await exportarProveedoresFiltrados(params);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `proveedores_filtrados_${getTodayLocal()}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Proveedores filtrados exportados');
+    } catch (err) {
+      toast.error(err.message || 'Error al exportar');
+    }
+  };
+
+  // CRUD
   const handleSubmit = async (data) => {
     setSaving(true);
     try {
@@ -47,9 +228,9 @@ const Proveedores = () => {
         await createProveedor(data);
         toast.success('Proveedor creado');
       }
-      setShowModal(false);
+      setShowForm(false);
       setEditing(null);
-      fetchData();
+      loadData();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error al guardar');
     } finally {
@@ -60,92 +241,381 @@ const Proveedores = () => {
   const handleDelete = (id, nombre) => {
     setConfirmModal({
       isOpen: true,
-      title: 'Eliminar Proveedor',
-      message: `¿Está seguro de eliminar a "${nombre}"?`,
+      title: 'Desactivar Proveedor',
+      message: `¿Estás seguro de desactivar a "${nombre}"? Podrás reactivarlo más adelante.`,
       onConfirm: async () => {
         try {
           await deleteProveedor(id);
-          toast.success('Proveedor eliminado');
-          fetchData();
+          toast.success('Proveedor desactivado');
+          loadData();
         } catch (err) {
-          toast.error('Error al eliminar');
+          toast.error(err.response?.data?.message || 'Error al desactivar');
         }
         setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: null });
-      }
+      },
     });
   };
 
+  const handleReactivar = (id, nombre) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Reactivar Proveedor',
+      message: `¿Estás seguro de reactivar a "${nombre}" en el sistema?`,
+      onConfirm: async () => {
+        try {
+          await reactivarProveedor(id);
+          toast.success('Proveedor reactivado');
+          loadData();
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Error al reactivar');
+        }
+        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: null });
+      },
+    });
+  };
+
+  const handleGenerarPDF = async (id) => {
+    try {
+      const blob = await generarProveedorPDF(id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `proveedor_${id}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('PDF generado');
+    } catch (err) {
+      toast.error(err.message || 'Error al generar PDF');
+    }
+  };
+
+  const goToPage = (page) => {
+    if (tableRef.current) setScrollPosition(tableRef.current.scrollTop);
+    setFiltros({ ...filtros, page });
+  };
+
   if (loading) return <LoadingSpinner />;
-  if (error) return <ErrorMessage message={error} onRetry={fetchData} />;
+  if (error) return <ErrorMessage message={error} onRetry={loadData} />;
+
+  const { total, page, totalPages } = paginacion;
+  const tieneFiltrosActivos = Object.values(filtros).some(v => v && v !== '' && v !== 1 && v !== false);
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-white">Proveedores</h1>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Buscar por nombre o NIT..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white w-64 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
+    <div className="p-6 space-y-6">
+      {/* HEADER */}
+      <div className="flex flex-wrap justify-between items-center gap-4 bg-gray-800/60 p-4 rounded-xl border border-gray-700/70 shadow-lg">
+        <div>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <Users className="w-6 h-6 text-purple-400" /> Gestión de Proveedores
+          </h1>
+          <p className="text-xs text-gray-400 mt-0.5">Registro de proveedores compatible con DTE.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => { setEditing(null); setShowModal(true); }}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition"
+            onClick={handleExportarTodos}
+            className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
           >
-            <Plus size={20} />
-            Nuevo Proveedor
+            <Download size={14} /> Exportar Todo
+          </button>
+          <button
+            onClick={() => { setEditing(null); setShowForm(true); }}
+            className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-md shadow-purple-900/30"
+          >
+            <Plus size={14} /> Nuevo Proveedor
           </button>
         </div>
       </div>
 
-      <div className="bg-gray-800/90 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-700">
-          <thead className="bg-gray-800/50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Razón Social</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">NIT</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Teléfono</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Email DTE</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-700">
-            {proveedores.length === 0 ? (
-              <tr><td colSpan="5" className="px-6 py-4 text-center text-gray-400">No hay proveedores</td></tr>
-            ) : (
-              proveedores.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-700/50 transition">
-                  <td className="px-6 py-4 text-gray-300">{p.razon_social}</td>
-                  <td className="px-6 py-4 text-gray-300">{p.numero_documento || '-'}</td>
-                  <td className="px-6 py-4 text-gray-300">{p.telefono || '-'}</td>
-                  <td className="px-6 py-4 text-gray-300">{p.email_dte || '-'}</td>
-                  <td className="px-6 py-4 space-x-2">
-                    <button
-                      onClick={() => { setEditing(p); setShowModal(true); }}
-                      className="text-yellow-400 hover:text-yellow-300 transition"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(p.id, p.razon_social)}
-                      className="text-red-400 hover:text-red-300 transition"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-4">
+        <div
+          className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700 flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 transition"
+          onClick={() => {
+            setFiltros({ ...filtros, activo: 'true', page: 1 });
+            setFiltrosTemp({ ...filtrosTemp, activo: 'true' });
+          }}
+        >
+          <UserCheck className="w-8 h-8 text-emerald-400" />
+          <div>
+            <p className="text-sm text-gray-400">Proveedores Activos</p>
+            <p className="text-2xl font-bold text-emerald-400">{totales.activos}</p>
+          </div>
+        </div>
+        <div
+          className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700 flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 transition"
+          onClick={() => {
+            setFiltros({ ...filtros, activo: 'false', page: 1 });
+            setFiltrosTemp({ ...filtrosTemp, activo: 'false' });
+          }}
+        >
+          <UserX className="w-8 h-8 text-rose-400" />
+          <div>
+            <p className="text-sm text-gray-400">Proveedores Inactivos</p>
+            <p className="text-2xl font-bold text-rose-400">{totales.inactivos}</p>
+          </div>
+        </div>
       </div>
 
-      {showModal && (
+      {/* FILTROS */}
+      <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                showFilters
+                  ? 'bg-purple-600 text-white border-purple-500'
+                  : 'bg-gray-700/70 hover:bg-gray-700 text-gray-200 border-gray-600'
+              }`}
+            >
+              <Filter size={14} />
+              {showFilters ? 'Ocultar Filtros' : 'Filtrar Proveedores'}
+            </button>
+            <button
+              onClick={handleExportarFiltrados}
+              className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <Download size={13} /> Exportar Vista
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <span className="italic">{getTablaTitle()}</span>
+            {tieneFiltrosActivos && (
+              <button
+                onClick={limpiarFiltros}
+                className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-semibold flex items-center gap-1 transition"
+              >
+                <X size={12} /> Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3 p-3 border-t border-gray-700/70">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
+              <input
+                type="text"
+                placeholder="Razón Social o Nombre..."
+                value={filtrosTemp.razon_social}
+                onChange={(e) => setFiltrosTemp({ ...filtrosTemp, razon_social: e.target.value })}
+                onKeyDown={handleSearchKeyDown}
+                className="pl-8 pr-7 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs w-full focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <input
+              type="text"
+              placeholder="NIT / DUI (número)"
+              value={filtrosTemp.numero_documento}
+              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, numero_documento: e.target.value })}
+              className="px-3 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <select
+              value={filtrosTemp.tipo_documento}
+              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, tipo_documento: e.target.value })}
+              className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">Todos los documentos</option>
+              <option value="NIT">NIT</option>
+              <option value="DUI">DUI</option>
+            </select>
+            <select
+              value={filtrosTemp.codigo_giro}
+              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, codigo_giro: e.target.value })}
+              className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">Todos los giros</option>
+              {actividades.map((act) => (
+                <option key={act.codigo_giro} value={act.codigo_giro}>
+                  {act.codigo_giro} - {act.descripcion_giro}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filtrosTemp.tipo_contribuyente}
+              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, tipo_contribuyente: e.target.value })}
+              className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">Todos los tipos</option>
+              <option value="Grande">Grande</option>
+              <option value="Mediano">Mediano</option>
+              <option value="Pequeño">Pequeño</option>
+              <option value="Exento">Exento</option>
+            </select>
+            <select
+              value={filtrosTemp.activo}
+              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, activo: e.target.value })}
+              className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">Todos los estados</option>
+              <option value="true">Solo activos</option>
+              <option value="false">Solo inactivos</option>
+            </select>
+            <div className="col-span-full flex justify-end gap-2 mt-1">
+              <button
+                onClick={cancelarFiltros}
+                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-semibold rounded-lg transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={aplicarFiltros}
+                className="px-4 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg shadow-md transition"
+              >
+                Aplicar Filtros
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* TABLA */}
+      <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-gray-700/80 bg-gray-800/40 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+            <h3 className="text-xs font-bold text-gray-200 uppercase tracking-wider">Listado de Proveedores</h3>
+          </div>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-700 text-gray-300 border border-gray-600">
+            Total: {total}
+          </span>
+        </div>
+
+        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+          <table className="min-w-full divide-y divide-gray-700/80 text-xs">
+            <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
+              <tr>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Razón Social</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Documento</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">NRC</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Giro</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Contribuyente</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Teléfono</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Email DTE</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
+              {proveedores.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="px-4 py-10 text-center text-gray-400">
+                    <Users className="w-8 h-8 mx-auto text-gray-600 mb-1" />
+                    <p className="text-xs font-medium">No se encontraron proveedores.</p>
+                  </td>
+                </tr>
+              ) : (
+                proveedores.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-700/30 transition-colors">
+                    <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{p.razon_social}</td>
+                    <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">
+                      <span className="text-gray-500 text-[10px]">{p.tipo_documento}:</span> {p.numero_documento}
+                    </td>
+                    <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">{p.nrc || '-'}</td>
+                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.descripcion_giro || '-'}</td>
+                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.tipo_contribuyente}</td>
+                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.telefono || '-'}</td>
+                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.email_dte || '-'}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {p.activo === 1 ? (
+                        <span className="text-emerald-400 font-semibold">Activo</span>
+                      ) : (
+                        <span className="text-rose-400 font-semibold">Inactivo</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => handleGenerarPDF(p.id)}
+                          title="Generar PDF"
+                          className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                        >
+                          <FileText size={12} />
+                        </button>
+                        {p.activo === 1 ? (
+                          <>
+                            <button
+                              onClick={() => { setEditing(p); setShowForm(true); }}
+                              title="Editar proveedor"
+                              className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                            >
+                              <Edit3 size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(p.id, p.razon_social)}
+                              title="Desactivar proveedor"
+                              className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleReactivar(p.id, p.razon_social)}
+                            title="Reactivar proveedor"
+                            className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                          >
+                            <RotateCcw size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center px-4 py-2 border-t border-gray-700/80 bg-gray-900/50 text-xs">
+            <span className="text-gray-400">
+              Mostrando página <strong className="text-white">{page}</strong> de <strong className="text-white">{totalPages}</strong> ({total} proveedores)
+            </span>
+            <div className="flex gap-1">
+              <button
+                onClick={() => goToPage(page - 1)}
+                disabled={page === 1}
+                className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-white transition"
+              >
+                Anterior
+              </button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let p = i + 1;
+                if (totalPages > 5) {
+                  if (page <= 3) p = i + 1;
+                  else if (page >= totalPages - 2) p = totalPages - 4 + i;
+                  else p = page - 2 + i;
+                }
+                return (
+                  <button
+                    key={p}
+                    onClick={() => goToPage(p)}
+                    className={`px-2.5 py-1 rounded text-xs font-bold transition ${
+                      p === page
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => goToPage(page + 1)}
+                disabled={page === totalPages}
+                className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-white transition"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* MODALES */}
+      {showForm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
             <h2 className="text-xl font-bold text-white mb-4">
@@ -154,8 +624,10 @@ const Proveedores = () => {
             <ProveedorForm
               initialData={editing || {}}
               onSubmit={handleSubmit}
-              onCancel={() => { setShowModal(false); setEditing(null); }}
+              onCancel={() => { setShowForm(false); setEditing(null); }}
               loading={saving}
+              departamentos={departamentos}
+              actividades={actividades}
             />
           </div>
         </div>

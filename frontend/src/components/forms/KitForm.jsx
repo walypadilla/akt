@@ -1,10 +1,18 @@
 // frontend/src/components/forms/KitForm.jsx
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Plus, Trash2, Search } from 'lucide-react';
-import { createProducto, getKitComponentes, addKitComponente, removeKitComponente } from '../../api/inventory';
+import { createProducto, updateProducto, getKitComponentes, addKitComponente, removeKitComponente } from '../../api/inventory';
 import { toast } from 'react-toastify';
 
-const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], marcas = [] }) => {
+const KitForm = ({ 
+  isOpen, 
+  onClose, 
+  onSuccess, 
+  producto = null, // Para edición
+  productos = [], 
+  categorias = [], 
+  marcas = [] 
+}) => {
   const [kitData, setKitData] = useState({
     nombre: '',
     descripcion: '',
@@ -13,21 +21,21 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
     costo_kit: 0,
     stock_actual: 0
   });
-  const [stockInicial, setStockInicial] = useState(0);
   const [componentes, setComponentes] = useState([]);
   const [selectedProductoId, setSelectedProductoId] = useState('');
   const [cantidad, setCantidad] = useState(1);
   const [loading, setLoading] = useState(false);
   const [creando, setCreando] = useState(false);
-  const [kitCreado, setKitCreado] = useState(null);
   const [busquedaProducto, setBusquedaProducto] = useState('');
   const [showProductoList, setShowProductoList] = useState(false);
+  const [cargandoComponentes, setCargandoComponentes] = useState(false);
+  const [esEdicion, setEsEdicion] = useState(false);
   const inputRef = useRef(null);
   const wrapperRef = useRef(null);
 
-  // Productos disponibles (no kits, solo productos)
+  // Productos disponibles (no kits, activos)
   const productosDisponibles = useMemo(
-    () => productos.filter(p => p.tipo === 'Producto' && !p.es_kit),
+    () => productos.filter(p => p.tipo === 'Producto' && !p.es_kit && p.activo === 1),
     [productos]
   );
 
@@ -42,6 +50,63 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
       .slice(0, 20);
   }, [busquedaProducto, productosDisponibles]);
 
+  // Resetear al abrir
+  useEffect(() => {
+    if (isOpen) {
+      if (producto) {
+        // Edición
+        setEsEdicion(true);
+        setKitData({
+          nombre: producto.nombre || '',
+          descripcion: producto.descripcion || '',
+          categoria_id: producto.categoria_id || '',
+          marca_id: producto.marca_id || '',
+          costo_kit: parseFloat(producto.precio_unitario) || 0,
+          stock_actual: parseFloat(producto.stock_actual) || 0,
+        });
+        cargarComponentes(producto.id);
+      } else {
+        // Nuevo kit
+        setEsEdicion(false);
+        setKitData({
+          nombre: '',
+          descripcion: '',
+          categoria_id: '',
+          marca_id: '',
+          costo_kit: 0,
+          stock_actual: 0,
+        });
+        setComponentes([]);
+        setBusquedaProducto('');
+        setSelectedProductoId('');
+        setCantidad(1);
+      }
+      setShowProductoList(false);
+    }
+  }, [isOpen, producto]);
+
+  const cargarComponentes = async (kitId) => {
+    try {
+      setCargandoComponentes(true);
+      const data = await getKitComponentes(kitId);
+      if (data && data.length > 0) {
+        setComponentes(data.map(c => ({
+          id: c.id,
+          producto_componente_id: c.producto_componente_id,
+          componente_nombre: c.componente_nombre || 'Producto',
+          cantidad: parseInt(c.cantidad) || 1,
+        })));
+      } else {
+        setComponentes([]);
+      }
+    } catch (error) {
+      console.error('Error cargando componentes:', error);
+      toast.error('Error al cargar componentes del kit');
+    } finally {
+      setCargandoComponentes(false);
+    }
+  };
+
   // Cerrar lista al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -53,28 +118,6 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Resetear al abrir
-  useEffect(() => {
-    if (isOpen) {
-      setKitData({
-        nombre: '',
-        descripcion: '',
-        categoria_id: '',
-        marca_id: '',
-        costo_kit: 0,
-      });
-      setStockInicial(0);
-      setComponentes([]);
-      setSelectedProductoId('');
-      setCantidad(1);
-      setCreando(false);
-      setKitCreado(null);
-      setBusquedaProducto('');
-      setShowProductoList(false);
-    }
-  }, [isOpen]);
-
-  // Generar SKU automático para el kit
   const generarSKU = (nombre) => {
     if (!nombre) return '';
     const prefix = 'KIT';
@@ -83,7 +126,6 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
     return `${prefix}${namePart}${randomNum}`;
   };
 
-  // Calcular costo total del kit
   const calcularCostoTotal = () => {
     let total = 0;
     componentes.forEach(c => {
@@ -95,7 +137,7 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
     return total;
   };
 
-  const handleCrearKit = async () => {
+  const handleGuardarKit = async () => {
     if (!kitData.nombre.trim()) {
       toast.error('Debes ingresar un nombre para el kit');
       return;
@@ -104,13 +146,9 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
       toast.error('Debes agregar al menos un producto al kit');
       return;
     }
-    if (stockInicial < 0) {
-      toast.error('La cantidad inicial no puede ser negativa');
-      return;
-    }
     setCreando(true);
     try {
-      const sku = generarSKU(kitData.nombre);
+      const sku = kitData.nombre ? generarSKU(kitData.nombre) : '';
       const costoTotal = kitData.costo_kit || calcularCostoTotal();
       const data = {
         nombre: kitData.nombre.trim(),
@@ -119,28 +157,51 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
         es_kit: true,
         precio_unitario: costoTotal,
         costo_promedio: costoTotal,
-        stock_actual: kitData.stock_actual || 0, // ← Aquí se envía
+        stock_actual: kitData.stock_actual || 0,
         stock_minimo: 0,
         codigo_sku: sku,
         categoria_id: kitData.categoria_id || null,
         marca_id: kitData.marca_id || null,
       };
-      const result = await createProducto(data);
-      const kitId = result.id;
-      // Agregar componentes al kit
-      for (const comp of componentes) {
-        await addKitComponente({
-          producto_kit_id: kitId,
-          producto_componente_id: comp.producto_componente_id,
-          cantidad: comp.cantidad,
-        });
+
+      let kitId;
+      if (esEdicion && producto) {
+        // Editar kit existente
+        await updateProducto(producto.id, data);
+        kitId = producto.id;
+        // Eliminar componentes antiguos y agregar nuevos
+        // Primero obtenemos los antiguos para eliminarlos
+        const oldComponents = await getKitComponentes(producto.id);
+        for (const old of oldComponents) {
+          await removeKitComponente(old.id);
+        }
+        // Luego agregamos los nuevos
+        for (const comp of componentes) {
+          await addKitComponente({
+            producto_kit_id: kitId,
+            producto_componente_id: comp.producto_componente_id,
+            cantidad: comp.cantidad,
+          });
+        }
+        toast.success('Kit actualizado exitosamente');
+      } else {
+        // Crear nuevo kit
+        const result = await createProducto(data);
+        kitId = result.id;
+        for (const comp of componentes) {
+          await addKitComponente({
+            producto_kit_id: kitId,
+            producto_componente_id: comp.producto_componente_id,
+            cantidad: comp.cantidad,
+          });
+        }
+        toast.success('Kit creado exitosamente');
       }
-      toast.success('Kit creado exitosamente');
       onSuccess();
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || 'Error al crear kit');
+      toast.error(err.response?.data?.message || 'Error al guardar kit');
     } finally {
       setCreando(false);
     }
@@ -151,7 +212,6 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
       toast.error('Selecciona un producto y una cantidad válida');
       return;
     }
-    // Verificar duplicado
     if (componentes.some(c => c.producto_componente_id === parseInt(selectedProductoId))) {
       toast.error('Este producto ya está en el kit');
       return;
@@ -194,13 +254,14 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
   if (!isOpen) return null;
 
   const costoTotal = calcularCostoTotal();
-  const precioKit = kitData.costo_kit || costoTotal;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold text-white">🧩 Crear Kit/Combo</h3>
+          <h3 className="text-xl font-bold text-white">
+            {esEdicion ? '✏️ Editar Kit/Combo' : '🧩 Crear Kit/Combo'}
+          </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white">
             <X size={24} />
           </button>
@@ -265,7 +326,6 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
           </div>
         </div>
 
-
         <div className="mt-4">
           <label className="text-sm text-gray-300 block mb-1">Costo del Kit (opcional)</label>
           <input
@@ -277,13 +337,12 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <p className="text-xs text-gray-400 mt-1">
-            Si no ingresas costo, se calculará automáticamente con los componentes.
-            {costoTotal > 0 && ` Costo calculado: $${costoTotal.toFixed(2)}`}
+            {costoTotal > 0 ? `Costo calculado: $${costoTotal.toFixed(2)}` : 'Ingresa un costo manual o agrega componentes'}
           </p>
         </div>
 
         <div className="mt-4">
-          <label className="text-sm text-gray-300 block mb-1">Stock Inicial (Cantidad de kits)</label>
+          <label className="text-sm text-gray-300 block mb-1">Stock Inicial</label>
           <input
             type="number"
             min="0"
@@ -292,7 +351,6 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
             onChange={(e) => setKitData({ ...kitData, stock_actual: parseInt(e.target.value) || 0 })}
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
-          <p className="text-xs text-gray-400 mt-1">Cantidad de unidades del kit que se van a ensamblar.</p>
         </div>
 
         <hr className="my-4 border-gray-700" />
@@ -318,7 +376,7 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
               {showProductoList && (
                 <div className="absolute z-50 w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                   {productosFiltrados.length === 0 ? (
-                    <div className="px-3 py-2 text-gray-400">No hay productos</div>
+                    <div className="px-3 py-2 text-gray-400">No hay productos disponibles</div>
                   ) : (
                     productosFiltrados.map(p => (
                       <div
@@ -356,7 +414,9 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
           <h4 className="text-sm font-medium text-gray-300 mb-2">
             Componentes del Kit ({componentes.length})
           </h4>
-          {componentes.length === 0 ? (
+          {cargandoComponentes ? (
+            <p className="text-gray-400 text-sm">Cargando componentes...</p>
+          ) : componentes.length === 0 ? (
             <p className="text-gray-400 text-sm">No hay componentes agregados.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -419,11 +479,11 @@ const KitForm = ({ isOpen, onClose, onSuccess, productos = [], categorias = [], 
             Cancelar
           </button>
           <button
-            onClick={handleCrearKit}
+            onClick={handleGuardarKit}
             disabled={creando || componentes.length === 0}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white transition disabled:opacity-50 flex items-center gap-2"
           >
-            {creando ? 'Creando...' : 'Crear Kit'}
+            {creando ? 'Guardando...' : (esEdicion ? 'Actualizar Kit' : 'Crear Kit')}
           </button>
         </div>
       </div>

@@ -32,10 +32,7 @@ class DetalleCompra {
   }
 
   static async deleteByCompraId(compra_gasto_id) {
-    await pool.query(
-      'DELETE FROM detalles_compra WHERE compra_gasto_id = ?',
-      [compra_gasto_id]
-    );
+    await pool.query('DELETE FROM detalles_compra WHERE compra_gasto_id = ?', [compra_gasto_id]);
   }
 }
 

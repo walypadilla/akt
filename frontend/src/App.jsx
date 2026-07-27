@@ -93,6 +93,7 @@ function App() {
                 <Route path="/clientes" element={<Clients />} />
                 <Route path="/facturas" element={<Invoices />} />
                 <Route path="/inventario" element={<Inventario />} />
+                <Route path="/productos" element={<Productos />} />
                 <Route path="/facturas/nueva" element={<InvoiceForm />} />
                 <Route path="/facturas/editar/:id" element={<InvoiceForm />} />
                 <Route path="/compras" element={<Purchases />} />

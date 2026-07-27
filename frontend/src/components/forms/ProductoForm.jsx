@@ -41,7 +41,7 @@ const ProductoForm = ({
     setMarcasLocal(marcas);
   }, [categorias, marcas]);
 
-  // Generar SKU automático
+  // Generar SKU automático (solo para productos nuevos, no para kits)
   const generarSKU = (nombre, categoriaId) => {
     if (!nombre) return '';
     const cat = categoriasLocal.find(c => c.id === parseInt(categoriaId));
@@ -52,6 +52,7 @@ const ProductoForm = ({
     return `${prefix}${namePart}${randomLetter}${randomNum}`;
   };
 
+  // Cargar datos del producto si estamos editando
   useEffect(() => {
     if (producto) {
       setFormData({
@@ -84,7 +85,7 @@ const ProductoForm = ({
     }
   }, [producto]);
 
-  // Cuando cambia el nombre o la categoría, actualizar SKU automático
+  // Cuando cambia el nombre o la categoría, actualizar SKU automático (solo para productos nuevos)
   useEffect(() => {
     if (!producto && formData.nombre && formData.categoria_id) {
       const nuevoSku = generarSKU(formData.nombre, formData.categoria_id);
@@ -97,7 +98,7 @@ const ProductoForm = ({
     let val = value;
     if (type === 'number') {
       val = parseFloat(value);
-      if (val < 0) return;
+      if (isNaN(val) || val < 0) return;
     }
     setFormData(prev => ({ ...prev, [name]: val }));
   };
@@ -143,7 +144,11 @@ const ProductoForm = ({
       payload.costo_promedio = parseFloat(payload.costo_promedio) || 0;
       payload.stock_actual = parseInt(payload.stock_actual) || 0;
       payload.stock_minimo = parseInt(payload.stock_minimo) || 0;
-
+      // Si es kit, no permitir guardar como producto normal
+      if (payload.es_kit) {
+        toast.error('Los kits se gestionan desde el módulo de kits');
+        return;
+      }
       if (producto) {
         await updateProducto(producto.id, payload);
         toast.success('Producto actualizado');
@@ -210,9 +215,11 @@ const ProductoForm = ({
                 name="codigo_sku"
                 value={formData.codigo_sku}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                readOnly
+                className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed"
                 placeholder="Automático"
               />
+              <p className="text-xs text-gray-400 mt-1">Generado automáticamente</p>
             </div>
           </div>
 

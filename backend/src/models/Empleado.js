@@ -35,24 +35,20 @@ class Empleado {
 
     const [rows] = await pool.query(sql, params);
 
-    // Contar total
     let countSql = `
       SELECT COUNT(*) AS total
       FROM empleados_nomina e
       WHERE e.organizacion_id = ?
     `;
     const countParams = [organizacion_id];
-
     if (search) {
       countSql += ` AND (e.nombre LIKE ? OR e.apellidos LIKE ? OR e.dui LIKE ?)`;
       countParams.push(searchParam, searchParam, searchParam);
     }
-
     if (activo !== null) {
       countSql += ` AND e.activo = ?`;
       countParams.push(activo ? 1 : 0);
     }
-
     const [countResult] = await pool.query(countSql, countParams);
     const total = countResult[0]?.total || 0;
 
@@ -78,13 +74,13 @@ class Empleado {
       organizacion_id, nombre, apellidos, salario_base, dui,
       cotiza_isss = 1, cotiza_afp = 1,
       afp_numero, isss_numero,
-      tipo_periodo = 'Mensual' // Nuevo campo
+      fecha_ingreso // ✅ agregado
     } = data;
     const [result] = await pool.query(
       `INSERT INTO empleados_nomina 
-       (organizacion_id, nombre, apellidos, salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, tipo_periodo, activo)
+       (organizacion_id, nombre, apellidos, salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, fecha_ingreso, activo)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      [organizacion_id, nombre, apellidos || '', salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, tipo_periodo]
+      [organizacion_id, nombre, apellidos || '', salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, fecha_ingreso]
     );
     return result.insertId;
   }
@@ -94,16 +90,16 @@ class Empleado {
       nombre, apellidos, salario_base, dui,
       cotiza_isss, cotiza_afp,
       afp_numero, isss_numero,
-      tipo_periodo
+      fecha_ingreso // ✅ agregado
     } = data;
     const [result] = await pool.query(
       `UPDATE empleados_nomina SET
         nombre = ?, apellidos = ?, salario_base = ?, dui = ?,
         cotiza_isss = ?, cotiza_afp = ?,
         afp_numero = ?, isss_numero = ?,
-        tipo_periodo = ?
+        fecha_ingreso = ?
        WHERE id = ? AND organizacion_id = ?`,
-      [nombre, apellidos || '', salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, tipo_periodo, id, organizacion_id]
+      [nombre, apellidos || '', salario_base, dui, cotiza_isss, cotiza_afp, afp_numero, isss_numero, fecha_ingreso, id, organizacion_id]
     );
     return result.affectedRows > 0;
   }

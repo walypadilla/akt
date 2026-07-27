@@ -19,9 +19,12 @@ class Planilla {
       sql += ' AND p.anio = ?';
       params.push(anio);
     }
-    if (estado) {
+    if (estado && estado !== 'no-anulada') {
       sql += ' AND p.estado = ?';
       params.push(estado);
+    } else if (!estado || estado === 'no-anulada') {
+      sql += ' AND p.estado != ?';
+      params.push('Anulada');
     }
     if (empleado_id) {
       sql += ' AND p.empleado_id = ?';
@@ -29,14 +32,12 @@ class Planilla {
     }
     sql += ' ORDER BY p.anio DESC, p.mes DESC, e.nombre ASC';
 
-    // Paginación
     const offset = (parseInt(page) - 1) * parseInt(limit);
     sql += ' LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
 
     const [rows] = await pool.query(sql, params);
 
-    // Contar total
     let countSql = `
       SELECT COUNT(*) AS total
       FROM planillas p
@@ -52,9 +53,12 @@ class Planilla {
       countSql += ' AND p.anio = ?';
       countParams.push(anio);
     }
-    if (estado) {
+    if (estado && estado !== 'no-anulada') {
       countSql += ' AND p.estado = ?';
       countParams.push(estado);
+    } else if (!estado || estado === 'no-anulada') {
+      countSql += ' AND p.estado != ?';
+      countParams.push('Anulada');
     }
     if (empleado_id) {
       countSql += ' AND p.empleado_id = ?';
@@ -133,10 +137,10 @@ class Planilla {
     return result.affectedRows > 0;
   }
 
-  static async existePlanilla(empleado_id, periodo_id) {
+  static async existePlanilla(empleado_id, periodo_id, organizacion_id) {
     const [rows] = await pool.query(
-      'SELECT id FROM planillas WHERE empleado_id = ? AND periodo_id = ?',
-      [empleado_id, periodo_id]
+      'SELECT id FROM planillas WHERE empleado_id = ? AND periodo_id = ? AND organizacion_id = ?',
+      [empleado_id, periodo_id, organizacion_id]
     );
     return rows.length > 0;
   }
@@ -149,10 +153,12 @@ class Planilla {
     return rows.map(r => r.anio);
   }
 
-  static async getCountByEmpleadoMes(empleado_id, mes, anio) {
+  static async getCountByEmpleadoMes(empleado_id, mes, anio, organizacion_id) {
     const [rows] = await pool.query(
-      `SELECT COUNT(*) as total FROM planillas WHERE empleado_id = ? AND mes = ? AND anio = ? AND tipo_periodo NOT IN ('Aguinaldo', 'Vacaciones')`,
-      [empleado_id, mes, anio]
+      `SELECT COUNT(*) as total FROM planillas 
+      WHERE empleado_id = ? AND mes = ? AND anio = ? AND organizacion_id = ?
+      AND tipo_periodo NOT IN ('Aguinaldo', 'Vacaciones')`,
+      [empleado_id, mes, anio, organizacion_id]
     );
     return rows[0].total;
   }

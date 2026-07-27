@@ -175,7 +175,7 @@ const InventarioDashboard = () => {
         getMarcas().catch(() => []),
         getEtiquetas().catch(() => []),
         getProyeccionAgotamientoMasiva().catch(() => []),
-        getProveedores().catch(() => []),
+        getProveedores({ limit: 99999 }).catch(() => ({ proveedores: [] })),
       ]);
       setDashboard({ ...dash, proyeccion: proyeccion || [] });
       setProductos(prods.productos || []);
@@ -184,7 +184,7 @@ const InventarioDashboard = () => {
       setCategorias(cats || []);
       setMarcas(marcasData || []);
       setEtiquetas(etiquetasData || []);
-      setProveedoresList(provsData || []);
+      setProveedoresList(provsData.proveedores || []);
     } catch (err) {
       console.error('Error loading data:', err);
       setError(err.message || 'Error al cargar datos');
@@ -445,8 +445,8 @@ const InventarioDashboard = () => {
     setProveedorInput('');
     setShowProveedorDropdown(false);
     try {
-      const provs = await getProveedores();
-      setProveedoresList(provs || []);
+      const provsData = await getProveedores({ limit: 99999 }).catch(() => ({ proveedores: [] }));
+      setProveedoresList(provsData.proveedores || []);
     } catch {
       setProveedoresList([]);
     }
@@ -557,9 +557,13 @@ const InventarioDashboard = () => {
   const { total, page, totalPages } = paginacion;
   const tieneFiltrosActivos = Object.values(filtros).some(v => v && v !== '' && v !== 1 && v !== false);
 
-  const filteredProveedores = proveedoresList.filter(prov =>
-    prov.nombre.toLowerCase().includes(proveedorInput.toLowerCase())
-  );
+  const filteredProveedores = Array.isArray(proveedoresList) 
+  ? proveedoresList.filter(prov => 
+      prov && 
+      (prov.razon_social || prov.nombre) && 
+      (prov.razon_social || prov.nombre).toLowerCase().includes(proveedorInput.toLowerCase())
+    )
+  : [];
 
   return (
     <div className="p-6 space-y-6">
@@ -1123,7 +1127,7 @@ const InventarioDashboard = () => {
                     placeholder="Escriba para buscar proveedor..."
                     value={proveedorInput}
                     onChange={(e) => {
-                      setProveedorInput(e.target.value);
+                      setProveedorInput(e.target.value || '');
                       setShowProveedorDropdown(true);
                       if (!e.target.value.trim()) {
                         setCostoData({ ...costoData, proveedor_id: '' });

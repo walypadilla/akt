@@ -159,12 +159,52 @@ export const cambiarEstadoMultiple = async (ids, estado) => {
   return response.data;
 };
 
-export const generarAguinaldos = async (data) => {
-  const response = await apiClient.post('/organization/planillas/aguinaldos', data);
+export const obtenerEstadoGeneracion = async (params) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(`/organization/planillas/estado-generacion?${query}`);
   return response.data;
 };
+
 
 export const generarVacaciones = async (data) => {
   const response = await apiClient.post('/organization/planillas/vacaciones', data);
   return response.data;
+};
+
+// ============================================================
+// AGUINALDOS
+// ============================================================
+
+
+export const generarAguinaldos = async (data) => {
+  const response = await apiClient.post('/organization/aguinaldos', data);
+  return response.data;
+};
+
+export const obtenerAguinaldos = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(`/organization/aguinaldos?${query}`); // ✅ Ruta corregida
+  return response.data;
+};
+
+export const cambiarEstadoAguinaldosMultiple = async (ids, estado) => {
+  const response = await apiClient.put('/organization/aguinaldos/multiple/estado', { ids, estado });
+  return response.data;
+};
+
+export const generarBoletaAguinaldoPDF = async (id) => {
+  const response = await apiClient.get(`/organization/aguinaldos/${id}/pdf`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
+export const exportarAguinaldos = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(`/organization/aguinaldos/exportar?${query}`, {
+    responseType: 'blob',
+  });
+  return new Blob(['\ufeff', response.data], {
+    type: 'text/csv;charset=utf-8;',
+  });
 };

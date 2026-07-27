@@ -217,11 +217,11 @@ class Producto {
   }
 
   static async incrementStock(producto_id, organizacion_id, cantidad) {
-    await pool.query(
-      'UPDATE productos SET stock_actual = stock_actual + ? WHERE id = ? AND organizacion_id = ?',
-      [cantidad, producto_id, organizacion_id]
-    );
-  }
+  await pool.query(
+    'UPDATE productos SET stock_actual = stock_actual + ? WHERE id = ? AND organizacion_id = ?',
+    [cantidad, producto_id, organizacion_id]
+  );
+}
 
   static async decrementStock(producto_id, organizacion_id, cantidad) {
     await pool.query(
