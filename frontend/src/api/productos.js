@@ -50,3 +50,8 @@ export const exportarProductosFiltrados = async (params = {}) => {
   });
   return new Blob(['\ufeff', response.data], { type: 'text/csv;charset=utf-8;' });
 };
+
+export const getComponentesKit = async (productoId) => {
+  const response = await apiClient.get(`/organization/productos/${productoId}/componentes`);
+  return response.data;
+};

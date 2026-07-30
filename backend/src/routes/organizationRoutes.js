@@ -11,9 +11,13 @@ const planillaController = require('../controllers/planillaController');
 const proveedorController = require('../controllers/proveedorController');
 const inventoryController = require('../controllers/inventoryController');
 const productoController = require('../controllers/productoController');
+const organizationDashboardController = require('../controllers/organizationDashboardController');
 
 const router = express.Router();
 router.use(authMiddleware);
+// --------------------------------------------
+router.get('/mi-organizacion', organizationDashboardController.obtenerMiOrganizacion);
+
 
 // ========== CLIENTES ==========
 router.get('/clientes', clienteController.obtenerClientes);
@@ -28,15 +32,6 @@ router.post('/proveedores', proveedorController.crearProveedor);
 router.get('/proveedores/:id', proveedorController.obtenerProveedorPorId);
 router.put('/proveedores/:id', proveedorController.actualizarProveedor);
 router.delete('/proveedores/:id', proveedorController.eliminarProveedor);
-
-// ========== FACTURAS ==========
-router.get('/facturas', facturaController.obtenerFacturas);
-router.post('/facturas', facturaController.crearFactura);
-router.get('/facturas/:id', facturaController.obtenerFacturaPorId);
-router.put('/facturas/:id', facturaController.editarFactura);
-router.put('/facturas/:id/estado', facturaController.cambiarEstadoFactura);
-router.put('/facturas/:id/anular', facturaController.anularFactura);
-router.get('/facturas/:id/pdf', facturaController.generarPDF);
 
 
 // ========== EMPLEADOS ==========
@@ -228,6 +223,37 @@ router.post('/productos/increment-stock', productoController.incrementStock);
 router.post('/productos/decrement-stock', productoController.decrementStock);
 router.get('/productos/exportar-todos', productoController.exportarTodos);
 router.get('/productos/exportar-filtrados', productoController.exportarFiltrados);
+router.get('/productos/:id/componentes', productoController.obtenerComponentesKit);
+
+// ============================================================
+// FACTURAS (VENTAS)
+// ============================================================
+// Dashboard
+router.get('/facturas/dashboard', facturaController.obtenerDashboardFacturacion);
+router.get('/facturas/anios', facturaController.getAniosDisponibles);
+router.get('/facturas/exportar/filtradas', facturaController.exportarFacturasFiltradas);
+router.get('/facturas/exportar/todas', facturaController.exportarTodasFacturas);
+router.get('/facturas/grafica/evolucion/exportar', facturaController.exportarEvolucionVentas);
+router.get('/facturas/grafica/comparacion-pagos/exportar', facturaController.exportarComparacionPagos);
+router.get('/facturas/grafica/distribucion/exportar', facturaController.exportarDistribucionTipoDocumento);
+router.get('/facturas/grafica/top-clientes/exportar', facturaController.exportarTopClientes);
+router.get('/facturas/monitor-dte', facturaController.obtenerMonitorDTE);
+router.get('/facturas/:id/ticket', facturaController.generarTicketFactura);
+// Envío WhatsApp
+router.post('/facturas/:id/whatsapp', facturaController.enviarFacturaWhatsApp);
+// CRUD
+router.get('/facturas', facturaController.obtenerFacturas);
+router.get('/facturas/:id', facturaController.obtenerFacturaPorId);
+router.post('/facturas', facturaController.crearFactura);
+router.put('/facturas/:id', facturaController.editarFactura);
+router.put('/facturas/:id/estado', facturaController.cambiarEstadoFactura);
+router.put('/facturas/:id/anular', facturaController.anularFactura);
+router.get('/facturas/:id/pdf', facturaController.generarPDFFactura);
+router.post('/facturas/:id/email', facturaController.enviarFacturaEmail);
+router.post('/facturas/:id/enviar-mh', facturaController.enviarFacturaMH);
+router.post('/facturas/:id/email-con-adjuntos', facturaController.enviarFacturaConAdjuntos);
+router.get('/facturas/exportar/cierre-mes', facturaController.exportarCierreMes);
+
 
 
 module.exports = router;

@@ -6,6 +6,32 @@ const Usuario = require('../models/Usuario');
 const PDFDocument = require('pdfkit');
 const PDFTable = require('pdfkit-table'); // Para usar el método de PDF (opcional)
 
+// Función auxiliar para normalizar números de teléfono
+function normalizarTelefono(numero) {
+  if (!numero) return null;
+  // Eliminar espacios, guiones, puntos
+  let limpio = numero.replace(/[\s\-.]/g, '');
+  // Si no tiene el prefijo +503, lo agregamos
+  if (!limpio.startsWith('+')) {
+    // Si solo tiene 8 dígitos, asumimos que es El Salvador
+    if (/^\d{8}$/.test(limpio)) {
+      return `+503${limpio}`;
+    }
+    // Si tiene 11 dígitos y empieza con 503 (ej: 50371409012)
+    if (/^503\d{8}$/.test(limpio)) {
+      return `+${limpio}`;
+    }
+    // Si tiene 10 dígitos y empieza con 503 (ej: 5037140901 - faltaría un dígito)
+    // En ese caso, mejor lo dejamos como está y avisamos
+    if (/^503\d{7}$/.test(limpio)) {
+      return `+${limpio}`;
+    }
+    // Para cualquier otro caso, simplemente agregamos el + (puede que ya tenga código de país)
+    return `+${limpio}`;
+  }
+  return limpio;
+}
+
 // ============================================================
 // 1. ORGANIZACIONES
 // ============================================================
@@ -64,6 +90,10 @@ exports.crearOrganizacion = async (req, res) => {
       password_admin
     } = req.body;
 
+    // Normalizar teléfonos
+    const telefonoNormalizado = telefono ? normalizarTelefono(telefono) : '';
+    const telefonoWhatsappNormalizado = telefono_whatsapp ? normalizarTelefono(telefono_whatsapp) : '';
+
     // Validaciones
     const errores = [];
     if (!nombre_empresa || nombre_empresa.trim() === '') errores.push('Nombre de empresa es obligatorio');
@@ -115,8 +145,8 @@ exports.crearOrganizacion = async (req, res) => {
         nombre_empresa.trim(),
         nombre_comercial ? nombre_comercial.trim() : '',
         direccion ? direccion.trim() : '',
-        telefono ? telefono.trim() : '',
-        telefono_whatsapp ? telefono_whatsapp.trim() : '',
+        telefonoNormalizado,
+        telefonoWhatsappNormalizado,
         nit.trim(),
         nrc ? nrc.trim() : '',
         tipo_contribuyente,
@@ -179,6 +209,10 @@ exports.actualizarOrganizacion = async (req, res) => {
       logo_url
     } = req.body;
 
+    // Normalizar teléfonos
+    const telefonoNormalizado = telefono ? normalizarTelefono(telefono) : '';
+    const telefonoWhatsappNormalizado = telefono_whatsapp ? normalizarTelefono(telefono_whatsapp) : '';
+
     // Verificar que la organización exista y no sea SuperAdmin
     const [org] = await pool.query(
       'SELECT id FROM organizaciones WHERE id = ? AND nombre_empresa != "SuperAdmin"',
@@ -221,8 +255,8 @@ exports.actualizarOrganizacion = async (req, res) => {
         nombre_empresa ? nombre_empresa.trim() : '',
         nombre_comercial ? nombre_comercial.trim() : '',
         direccion ? direccion.trim() : '',
-        telefono ? telefono.trim() : '',
-        telefono_whatsapp ? telefono_whatsapp.trim() : '',
+        telefonoNormalizado,
+        telefonoWhatsappNormalizado,
         nit ? nit.trim() : '',
         nrc ? nrc.trim() : '',
         tipo_contribuyente || 'Pequeño',

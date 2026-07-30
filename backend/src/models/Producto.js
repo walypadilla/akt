@@ -216,15 +216,29 @@ class Producto {
     return result.affectedRows > 0;
   }
 
-  static async incrementStock(producto_id, organizacion_id, cantidad) {
-  await pool.query(
-    'UPDATE productos SET stock_actual = stock_actual + ? WHERE id = ? AND organizacion_id = ?',
-    [cantidad, producto_id, organizacion_id]
-  );
-}
+  static async incrementStock(producto_id, organizacion_id, cantidad, connection = null) {
+    const db = connection || pool;
+    await db.query(
+      'UPDATE productos SET stock_actual = stock_actual + ? WHERE id = ? AND organizacion_id = ?',
+      [cantidad, producto_id, organizacion_id]
+    );
+  }
 
-  static async decrementStock(producto_id, organizacion_id, cantidad) {
-    await pool.query(
+  static async decrementStock(producto_id, organizacion_id, cantidad, connection = null) {
+    const db = connection || pool;
+    // Validar stock
+    const [rows] = await db.query(
+      'SELECT stock_actual FROM productos WHERE id = ? AND organizacion_id = ?',
+      [producto_id, organizacion_id]
+    );
+    if (rows.length === 0) {
+      throw new Error('Producto no encontrado');
+    }
+    const stockActual = rows[0].stock_actual;
+    if (stockActual < cantidad) {
+      throw new Error(`Stock insuficiente. Disponible: ${stockActual}, solicitado: ${cantidad}`);
+    }
+    await db.query(
       'UPDATE productos SET stock_actual = stock_actual - ? WHERE id = ? AND organizacion_id = ? AND stock_actual >= ?',
       [cantidad, producto_id, organizacion_id, cantidad]
     );
@@ -421,6 +435,17 @@ class Producto {
       promedio_diario: parseFloat(r.promedio_diario),
       dias: r.promedio_diario > 0 ? Math.floor(r.stock_actual / r.promedio_diario) : Infinity,
     }));
+  }
+
+  static async getComponentes(producto_id, organizacion_id) {
+    const [rows] = await pool.query(
+      `SELECT pc.*, p.nombre AS componente_nombre, p.precio_unitario, p.costo_promedio
+      FROM producto_componentes pc
+      JOIN productos p ON pc.producto_componente_id = p.id
+      WHERE pc.producto_kit_id = ? AND p.organizacion_id = ?`,
+      [producto_id, organizacion_id]
+    );
+    return rows;
   }
 
 } 

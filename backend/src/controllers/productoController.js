@@ -109,7 +109,7 @@ exports.decrementStock = async (req, res) => {
   try {
     const { producto_id, cantidad } = req.body;
     const organizacion_id = req.organizacion_id || 1;
-    await Producto.decrementStock(producto_id, organizacion_id, cantidad);
+    await Producto.decrementStock(producto_id, organizacion_id, cantidad, connection);
     res.json({ message: 'Stock decrementado' });
   } catch (error) {
     res.status(500).json({ message: 'Error al decrementar stock', error: error.message });
@@ -276,5 +276,17 @@ exports.exportarFiltrados = async (req, res) => {
   } catch (error) {
     console.error('❌ [exportarFiltrados] Error:', error);
     res.status(500).json({ message: 'Error al exportar productos filtrados', error: error.message });
+  }
+};
+
+exports.obtenerComponentesKit = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const organizacion_id = req.organizacion_id;
+    const componentes = await Producto.getComponentes(id, organizacion_id);
+    res.json(componentes);
+  } catch (error) {
+    console.error('❌ Error al obtener componentes del kit:', error);
+    res.status(500).json({ message: 'Error al obtener componentes', error: error.message });
   }
 };

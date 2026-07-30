@@ -11,7 +11,7 @@ class Usuario {
         sql += ' AND organizacion_id = ?';
         params.push(filters.organizacion_id);
     }
-    if (filters.rol) { // <-- Agregar esta condición
+    if (filters.rol) { 
         sql += ' AND rol = ?';
         params.push(filters.rol);
     }

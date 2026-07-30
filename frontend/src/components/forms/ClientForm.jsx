@@ -18,9 +18,9 @@ const ClientForm = ({
     giro: initialData.giro || '',
     tipo_contribuyente: initialData.tipo_contribuyente || 'Pequeño',
     direccion: initialData.direccion || '',
-    telefono: initialData.telefono || '',
     correo: initialData.correo || '',
-    telefono_whatsapp: initialData.telefono_whatsapp || '',
+    telefono: initialData.telefono ? initialData.telefono.replace(/^\+503/, '') : '',
+    telefono_whatsapp: initialData.telefono_whatsapp ? initialData.telefono_whatsapp.replace(/^\+503/, '') : '',
     id_departamento: initialData.id_departamento || '',
     id_municipio: initialData.id_municipio || '',
     direccion_linea: initialData.direccion_linea || '',
@@ -192,6 +192,8 @@ const ClientForm = ({
         dui: formData.dui ? formData.dui.replace(/[^0-9]/g, '') : '',
         nit: formData.nit ? formData.nit.replace(/[^0-9]/g, '') : '',
         nrc: formData.nrc ? formData.nrc.replace(/[^0-9]/g, '') : '',
+        telefono: formData.telefono ? `+503${formData.telefono}` : '',
+        telefono_whatsapp: formData.telefono_whatsapp ? `+503${formData.telefono_whatsapp}` : '',
       };
       onSubmit(cleanData);
     }

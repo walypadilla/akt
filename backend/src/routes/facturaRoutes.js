@@ -7,19 +7,24 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // Rutas existentes
-router.post('/', facturaController.crearFactura);
-router.get('/', facturaController.obtenerFacturas);
-router.get('/ultimas', facturaController.obtenerUltimasFacturas);
-router.get('/buscar', facturaController.buscarFacturas);
-router.get('/:id', facturaController.obtenerFacturaPorId);
-router.put('/:id/estado', facturaController.cambiarEstadoFactura);
-router.put('/:id', facturaController.editarFactura);
-router.put('/:id/anular', facturaController.anularFactura);
+router.get('/facturas/dashboard', facturaController.obtenerDashboardFacturacion);
+router.get('/facturas/anios', facturaController.getAniosDisponibles);
+router.get('/facturas/exportar/filtradas', facturaController.exportarFacturasFiltradas);
+router.get('/facturas/exportar/todas', facturaController.exportarTodasFacturas);
+router.get('/facturas/grafica/evolucion/exportar', facturaController.exportarEvolucionVentas);
+router.get('/facturas/grafica/comparacion-pagos/exportar', facturaController.exportarComparacionPagos);
+router.get('/facturas/grafica/distribucion/exportar', facturaController.exportarDistribucionTipoDocumento);
+router.get('/facturas/grafica/top-clientes/exportar', facturaController.exportarTopClientes);
+// Envío WhatsApp
+router.post('/facturas/:id/whatsapp', facturaController.enviarFacturaWhatsApp);
+// CRUD
+router.get('/facturas', facturaController.obtenerFacturas);
+router.get('/facturas/:id', facturaController.obtenerFacturaPorId);
+router.post('/facturas', facturaController.crearFactura);
+router.put('/facturas/:id', facturaController.editarFactura);
+router.put('/facturas/:id/estado', facturaController.cambiarEstadoFactura);
+router.put('/facturas/:id/anular', facturaController.anularFactura);
+router.get('/facturas/:id/pdf', facturaController.generarPDFFactura);
 
-router.post('/:factura_id/detalles', facturaController.crearDetalle);
-router.delete('/detalles/:id', facturaController.eliminarDetalle);
-
-// ¡Esta es la ruta del PDF!
-router.get('/:id/pdf', facturaController.generarPDF);
 
 module.exports = router;

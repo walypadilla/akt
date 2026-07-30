@@ -3,9 +3,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { AuthProvider } from './context/AuthContext'; // ✅ Solo AuthProvider
-import { useAuth } from './hooks/useAuth'; // ✅ useAuth desde hooks
-import { DashboardProvider } from './context/DashboardContext'; // ✅ Para los wrappers
+import { AuthProvider } from './context/AuthContext'; // 
+import { useAuth } from './hooks/useAuth'; // 
+import { DashboardProvider } from './context/DashboardContext'; // 
 import PrivateRoute from './components/common/PrivateRoute';
 import Layout from './components/layout/Layout';
 
@@ -29,12 +29,12 @@ import Productos from './pages/superadmin/Productos';
 import OrganizationDashboard from './pages/organization/OrganizationDashboard';
 import Clients from './pages/organization/Clients';
 import Invoices from './pages/organization/Invoices';
-import InvoiceForm from './components/forms/InvoiceForm';
 import Purchases from './pages/organization/Purchases';
 import Proveedores from './pages/organization/Proveedores';
 import Employees from './pages/organization/Employees';
 import Payroll from './pages/organization/Payroll';
 import Inventario from './pages/organization/InventoryDashboard';
+import DTEMonitor from './pages/organization/DTEMonitor';
 
 // Wrappers
 import FacturasPorOrganizacionWrapper from './components/wrappers/FacturasPorOrganizacionWrapper';
@@ -104,10 +104,9 @@ function App() {
 								/>
 								<Route path='/clientes' element={<Clients />} />
 								<Route path='/facturas' element={<Invoices />} />
+								<Route path="/facturas/monitor-dte" element={<DTEMonitor />} />
 								<Route path='/inventario' element={<Inventario />} />
 								<Route path='/productos' element={<Productos />} />
-								<Route path='/facturas/nueva' element={<InvoiceForm />} />
-								<Route path='/facturas/editar/:id' element={<InvoiceForm />} />
 								<Route path='/compras' element={<Purchases />} />
 								<Route path='/proveedores' element={<Proveedores />} />
 								<Route path='/empleados' element={<Employees />} />

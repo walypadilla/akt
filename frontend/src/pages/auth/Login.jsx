@@ -1,3 +1,4 @@
+// frontend/src/pages/auth/Login.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login as loginApi } from '../../api/auth';
@@ -19,11 +20,17 @@ const Login = () => {
 
     try {
       const data = await loginApi(correo, password);
+      
+      // Guardar token
       localStorage.setItem('token', data.token);
+      
+      // Guardar usuario con organización completa
       localStorage.setItem('user', JSON.stringify(data.usuario));
+      
+      // Actualizar contexto de autenticación
       login(data.usuario);
 
-      // Redirigir según el rol
+      // Redireccionar según rol
       if (data.usuario.rol === 'SUPER_ADMIN') {
         navigate('/dashboard');
       } else {
@@ -39,7 +46,6 @@ const Login = () => {
       setLoading(false);
     }
   };
-
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">

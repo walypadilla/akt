@@ -9,8 +9,8 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
     nit: initialData.nit || '',
     nrc: initialData.nrc || '',
     direccion: initialData.direccion || '',
-    telefono: initialData.telefono || '',
-    telefono_whatsapp: initialData.telefono_whatsapp || '',
+    telefono: initialData.telefono ? initialData.telefono.replace(/^\+503/, '') : '',
+    telefono_whatsapp: initialData.telefono_whatsapp ? initialData.telefono_whatsapp.replace(/^\+503/, '') : '',
     correo_contacto: initialData.correo_contacto || '',
     tipo_contribuyente: initialData.tipo_contribuyente || 'Pequeño',
     tipo_organizacion: initialData.tipo_organizacion || 'Empresa Comercial',
@@ -118,7 +118,12 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validate()) {
-      onSubmit(formData);
+      const dataToSubmit = {
+        ...formData,
+        telefono: formData.telefono ? `+503${formData.telefono}` : '',
+        telefono_whatsapp: formData.telefono_whatsapp ? `+503${formData.telefono_whatsapp}` : '',
+      };
+      onSubmit(dataToSubmit);
     }
   };
 

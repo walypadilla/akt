@@ -9,17 +9,29 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const userData = getCurrentUser();
-    setUser(userData);
+    // Cargar usuario desde localStorage
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        setUser(null);
+      }
+    }
     setLoading(false);
   }, []);
 
   const login = (userData) => {
     setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const logout = () => {
     setUser(null);
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
   };
 
   return (

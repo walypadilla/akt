@@ -357,3 +357,25 @@ exports.getDashboardCompleto = async (req, res) => {
     res.status(500).json({ message: 'Error al obtener dashboard completo', error: error.message });
   }
 };
+
+exports.obtenerMiOrganizacion = async (req, res) => {
+  try {
+    const organizacion_id = req.organizacion_id;
+    const [rows] = await pool.query(
+      `SELECT id, nombre_empresa, nombre_comercial, nit, nrc, 
+              direccion, telefono, telefono_whatsapp, correo_contacto, 
+              tipo_contribuyente, ambiente, logo_url, estado
+       FROM organizaciones WHERE id = ?`,
+      [organizacion_id]
+    );
+    console.log(organizacion_id);
+    console.log(rows);
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Organización no encontrada' });
+    }
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('❌ Error al obtener organización:', error);
+    res.status(500).json({ message: 'Error al obtener organización', error: error.message });
+  }
+};

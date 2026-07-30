@@ -18,17 +18,37 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ message: 'Usuario inactivo' });
     }
 
-    // Verificar organización (si no es SUPER_ADMIN)
+    let organizacionData = null;
+    
+    // Si no es SUPER_ADMIN, obtener datos de la organización
     if (user.rol !== 'SUPER_ADMIN' && user.organizacion_id) {
       const [orgRows] = await pool.query(
-        'SELECT estado, nombre_empresa FROM organizaciones WHERE id = ?',
+        `SELECT id, nombre_empresa, nombre_comercial, nit, nrc, 
+                direccion, telefono, telefono_whatsapp, correo_contacto, 
+                tipo_contribuyente, ambiente, logo_url, estado
+         FROM organizaciones WHERE id = ?`,
         [user.organizacion_id]
       );
+      
       if (orgRows.length === 0 || orgRows[0].estado !== 'Activo') {
         return res.status(403).json({ message: 'Organización inactiva' });
       }
-      // Guardar nombre de la organización para el frontend
-      user.organizacion_nombre = orgRows[0].nombre_empresa;
+      
+      organizacionData = {
+        id: orgRows[0].id,
+        nombre_empresa: orgRows[0].nombre_empresa,
+        nombre_comercial: orgRows[0].nombre_comercial,
+        nit: orgRows[0].nit,
+        nrc: orgRows[0].nrc,
+        direccion: orgRows[0].direccion,
+        telefono: orgRows[0].telefono,
+        telefono_whatsapp: orgRows[0].telefono_whatsapp,
+        correo_contacto: orgRows[0].correo_contacto,
+        tipo_contribuyente: orgRows[0].tipo_contribuyente,
+        ambiente: orgRows[0].ambiente,
+        logo_url: orgRows[0].logo_url,
+        estado: orgRows[0].estado,
+      };
     }
 
     const token = jwt.sign(
@@ -37,7 +57,6 @@ router.post('/login', async (req, res) => {
       { expiresIn: '8h' }
     );
 
-    //  Detectar si es contraseña temporal
     const esTemporal = user.password_temporal === 1;
 
     res.json({
@@ -48,13 +67,15 @@ router.post('/login', async (req, res) => {
         correo: user.correo,
         rol: user.rol,
         organizacion_id: user.organizacion_id,
-        organizacion_nombre: user.organizacion_nombre || null,
+        organizacion: organizacionData,
         es_temporal: esTemporal,
       },
       mensaje: esTemporal ? 'Contraseña temporal. Debe cambiarla.' : undefined
+      
     });
+    
   } catch (error) {
-    console.error(' [login] Error:', error);
+    console.error('❌ [login] Error:', error);
     res.status(500).json({ message: 'Error en login', error: error.message });
   }
 });

@@ -1,6 +1,33 @@
 const Cliente = require('../models/Cliente');
 const { pool } = require('../config/db');
 
+// Función auxiliar para normalizar números de teléfono
+function normalizarTelefono(numero) {
+  if (!numero) return null;
+  // Eliminar espacios, guiones, puntos
+  let limpio = numero.replace(/[\s\-.]/g, '');
+  // Si no tiene el prefijo +503, lo agregamos
+  if (!limpio.startsWith('+')) {
+    // Si solo tiene 8 dígitos, asumimos que es El Salvador
+    if (/^\d{8}$/.test(limpio)) {
+      return `+503${limpio}`;
+    }
+    // Si tiene 11 dígitos y empieza con 503 (ej: 50371409012)
+    if (/^503\d{8}$/.test(limpio)) {
+      return `+${limpio}`;
+    }
+    // Si tiene 10 dígitos y empieza con 503 (ej: 5037140901 - faltaría un dígito)
+    // En ese caso, mejor lo dejamos como está y avisamos
+    if (/^503\d{7}$/.test(limpio)) {
+      return `+${limpio}`;
+    }
+    // Para cualquier otro caso, simplemente agregamos el + (puede que ya tenga código de país)
+    return `+${limpio}`;
+  }
+  return limpio;
+}
+
+
 // ============================================================
 // OBTENER CLIENTES (CON PAGINACIÓN Y FILTROS)
 // ============================================================
@@ -60,6 +87,9 @@ exports.crearCliente = async (req, res) => {
     const organizacion_id = req.organizacion_id;
     const data = { ...req.body, organizacion_id };
 
+    // Normalizar teléfonos
+    if (data.telefono) data.telefono = normalizarTelefono(data.telefono);
+    if (data.telefono_whatsapp) data.telefono_whatsapp = normalizarTelefono(data.telefono_whatsapp);
     // Validar duplicados de NIT
     if (data.nit) {
       const exists = await Cliente.existsNit(data.nit, organizacion_id);
@@ -87,6 +117,10 @@ exports.actualizarCliente = async (req, res) => {
     const { id } = req.params;
     const organizacion_id = req.organizacion_id;
     const data = req.body;
+
+    // Normalizar teléfonos
+    if (data.telefono) data.telefono = normalizarTelefono(data.telefono);
+    if (data.telefono_whatsapp) data.telefono_whatsapp = normalizarTelefono(data.telefono_whatsapp);
 
     const cliente = await Cliente.findById(id, organizacion_id);
     if (!cliente) {

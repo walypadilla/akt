@@ -1,6 +1,7 @@
 // frontend/src/pages/organization/OrganizationDashboard.jsx
 import React, { useEffect, useState } from 'react';
-import { getOrganizationDashboard } from '../../api/organizationDashboard'; // ✅ Nuevo import
+import { getOrganizationDashboard } from '../../api/organizationDashboard';
+import { getDashboardFacturacion } from '../../api/invoices';
 import KPICards from '../../components/common/KPICards';
 import TopClientsTable from '../../components/common/TopClientsTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -18,10 +19,16 @@ import {
   Legend,
   ResponsiveContainer,
   ComposedChart,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
+
+const COLORS = ['#8b5cf6', '#f43f5e', '#10b981', '#f59e0b'];
 
 const OrganizationDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
+  const [facturacionData, setFacturacionData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -31,13 +38,16 @@ const OrganizationDashboard = () => {
     mes: new Date().getMonth() + 1,
   });
 
-  // ✅ Usamos getOrganizationDashboard
   const fetchData = async (periodo, anio, mes) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getOrganizationDashboard(periodo, anio, mes);
-      setDashboardData(data);
+      const [orgData, factData] = await Promise.all([
+        getOrganizationDashboard(periodo, anio, mes),
+        getDashboardFacturacion({ anio, mes: mes || '' }),
+      ]);
+      setDashboardData(orgData);
+      setFacturacionData(factData);
     } catch (err) {
       setError(err.message || 'Error al cargar dashboard');
       toast.error('Error al cargar dashboard');
@@ -66,6 +76,13 @@ const OrganizationDashboard = () => {
   const isPeriodoMes = filtros.periodo === 'mes';
   const chartData = isPeriodoMes ? (datosDiarios || []) : (datosMensuales || []);
   const chartXKey = isPeriodoMes ? 'dia' : 'mes';
+
+  // Datos para gráfica de distribución por tipo documento
+  const distribucion = facturacionData?.distribucion || [];
+  const pieData = distribucion.map(item => ({
+    name: item.tipo_documento,
+    value: parseFloat(item.total),
+  }));
 
   return (
     <div className="p-6">
@@ -149,6 +166,32 @@ const OrganizationDashboard = () => {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Distribución por Tipo Documento */}
+      {pieData.length > 0 && pieData.some(d => d.value > 0) && (
+        <div className="mt-6 bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-200 mb-4">Distribución por Tipo Documento</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie
+                data={pieData}
+                cx="50%"
+                cy="50%"
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              >
+                {pieData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+              <Legend wrapperStyle={{ color: '#e5e7eb' }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       <div className="mt-6">
         <TopClientsTable clients={topClientes} title={`Top Clientes por Facturación (${periodo?.label || 'periodo seleccionado'})`} />

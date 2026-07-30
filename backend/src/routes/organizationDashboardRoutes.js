@@ -13,5 +13,6 @@ router.get('/', organizationDashboardController.getDashboardCompleto);
 router.get('/kpis', organizationDashboardController.getKPIs);
 router.get('/monthly', organizationDashboardController.getMonthlyData);
 router.get('/top-clients', organizationDashboardController.getTopClients);
+router.get('/mi-organizacion', organizationDashboardController.obtenerMiOrganizacion);
 
 module.exports = router;
