@@ -2,6 +2,7 @@
 const express = require('express');
 const { authMiddleware, isSuperAdmin } = require('../middleware/authMiddleware');
 const superAdminController = require('../controllers/superAdminController');
+const upload = require('../middleware/uploadMiddleware');
 
 
 const router = express.Router();
@@ -11,9 +12,10 @@ router.use(isSuperAdmin);
 // Organizaciones
 router.get('/organizaciones', superAdminController.obtenerOrganizaciones);
 router.get('/organizaciones/:id', superAdminController.obtenerOrganizacionPorId);
-router.post('/organizaciones', superAdminController.crearOrganizacion);
-router.put('/organizaciones/:id', superAdminController.actualizarOrganizacion);
+router.post('/organizaciones', upload.single('logo'), superAdminController.crearOrganizacion);
+router.put('/organizaciones/:id', upload.single('logo'), superAdminController.actualizarOrganizacion);
 router.put('/organizaciones/:organizacion_id/estado', superAdminController.cambiarEstadoOrganizacion);
+router.post('/organizaciones/:id/logo', upload.single('logo'), superAdminController.subirLogoOrganizacion);
 
 // Usuarios de organizaciones
 router.get('/organizaciones/:organizacion_id/usuarios', superAdminController.obtenerUsuariosPorOrganizacion);
@@ -32,6 +34,8 @@ router.delete('/superadmins/:id', superAdminController.eliminarSuperAdmin);
 
 // Dashboard
 router.get('/dashboard', superAdminController.obtenerDashboardSuperAdmin);
+router.get('/consumo-global', superAdminController.obtenerConsumoGlobal);
+router.get('/planes', superAdminController.obtenerPlanes);
 
 // Membresías y contabilidad
 router.post('/pago-membresia', superAdminController.registrarPagoMembresia);

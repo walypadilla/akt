@@ -3,6 +3,7 @@ const { pool } = require('../config/db');
 const bcrypt = require('bcrypt');
 const Factura = require('../models/Factura');
 const Usuario = require('../models/Usuario');
+const Plan = require('../models/Plan')
 const PDFDocument = require('pdfkit');
 const PDFTable = require('pdfkit-table'); // Para usar el método de PDF (opcional)
 
@@ -71,7 +72,7 @@ exports.obtenerOrganizacionPorId = async (req, res) => {
 
 exports.crearOrganizacion = async (req, res) => {
   try {
-    const {
+     const {
       nombre_empresa,
       nombre_comercial,
       direccion,
@@ -87,8 +88,23 @@ exports.crearOrganizacion = async (req, res) => {
       logo_url,
       correo_admin,
       nombre_admin,
-      password_admin
+      password_admin,
+      id_departamento,
+      id_municipio,
+      direccion_linea,
+      codigo_giro,
+      plan_id = 1,
+      whatsapp_activado = true,
+      limite_facturas = 40,
+      limite_whatsapp = 200,
     } = req.body;
+
+    // Verificar si Multer atrapó un archivo en req.file
+    let logoUrlFinal = logo_url ? logo_url.trim() : '';
+    if (req.file) {
+      // Guardamos la ruta relativa para poder servirla después
+      logoUrlFinal = `/uploads/logos/${req.file.filename}`;
+    }
 
     // Normalizar teléfonos
     const telefonoNormalizado = telefono ? normalizarTelefono(telefono) : '';
@@ -135,12 +151,30 @@ exports.crearOrganizacion = async (req, res) => {
       }
     }
 
-    // Insertar organización con todos los campos
-    const [orgResult] = await pool.query(
+    const ambienteMap = {
+      'Pruebas': '00',
+      'Producción': '01',
+    };
+    const ambienteDB = ambienteMap[ambiente] || '00';
+
+    // --- NUEVO: Normalizar booleanos y enteros para evitar fallos al recibir FormData ---
+    const isWhatsappActivo = whatsapp_activado === true || 
+                             whatsapp_activado === 'true' || 
+                             whatsapp_activado === 1 || 
+                             whatsapp_activado === '1';
+    const limitFacturasVal = parseInt(limite_facturas, 10) || 40;
+    const limitWhatsappVal = isWhatsappActivo ? (parseInt(limite_whatsapp, 10) || 0) : 0;
+    // ------------------------------------------------------------------------------------
+
+    // Insertar organización con todos los campos incluyendo los DTE
+     const [orgResult] = await pool.query(
       `INSERT INTO organizaciones 
-       (nombre_empresa, nombre_comercial, direccion, telefono, telefono_whatsapp, 
-        nit, nrc, tipo_contribuyente, tipo_organizacion, ambiente, token_mh, llave_privada_p12, logo_url, estado) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (nombre_empresa, nombre_comercial, direccion, telefono, telefono_whatsapp, 
+        nit, nrc, tipo_contribuyente, tipo_organizacion, ambiente, 
+        token_mh, llave_privada_p12, logo_url, estado,
+        id_departamento, id_municipio, direccion_linea, codigo_giro,
+        plan_id, whatsapp_activado, limite_facturas, limite_whatsapp) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         nombre_empresa.trim(),
         nombre_comercial ? nombre_comercial.trim() : '',
@@ -151,11 +185,19 @@ exports.crearOrganizacion = async (req, res) => {
         nrc ? nrc.trim() : '',
         tipo_contribuyente,
         tipo_organizacion || 'Empresa Comercial',
-        ambiente || 'Pruebas',
+        ambienteDB,
         token_mh || null,
         llave_privada_p12 || null,
-        logo_url ? logo_url.trim() : '',
-        'Activo'
+        logoUrlFinal,
+        'Activo',
+        id_departamento || null,
+        id_municipio || null,
+        direccion_linea || null,
+        codigo_giro || '62010',
+        plan_id,
+        isWhatsappActivo ? 1 : 0,
+        limitFacturasVal,
+        limitWhatsappVal,
       ]
     );
     const organizacion_id = orgResult.insertId;
@@ -165,14 +207,7 @@ exports.crearOrganizacion = async (req, res) => {
     await pool.query(
       `INSERT INTO usuarios (organizacion_id, nombre, correo, password, rol, estado)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        organizacion_id,
-        nombre_admin ? nombre_admin.trim() : 'Administrador',
-        correo_admin.trim(),
-        hashedPassword,
-        'Admin',
-        'Activo'
-      ]
+      [organizacion_id, nombre_admin || 'Administrador', correo_admin.trim(), hashedPassword, 'Admin', 'Activo']
     );
 
     res.status(201).json({
@@ -206,8 +241,23 @@ exports.actualizarOrganizacion = async (req, res) => {
       ambiente,
       token_mh,
       llave_privada_p12,
-      logo_url
+      logo_url,
+      id_departamento,
+      id_municipio,
+      direccion_linea,
+      codigo_giro,
+      plan_id,
+      whatsapp_activado,
+      limite_facturas,
+      limite_whatsapp,
     } = req.body;
+
+    // Verificar si Multer atrapó un archivo en req.file
+    let logoUrlFinal = logo_url ? logo_url.trim() : '';
+    if (req.file) {
+      // Si se subió un archivo nuevo, sobreescribimos con su ruta
+      logoUrlFinal = `/uploads/logos/${req.file.filename}`;
+    }
 
     // Normalizar teléfonos
     const telefonoNormalizado = telefono ? normalizarTelefono(telefono) : '';
@@ -244,13 +294,31 @@ exports.actualizarOrganizacion = async (req, res) => {
       }
     }
 
+    // Mapear ambiente: 'Pruebas' -> '00', 'Producción' -> '01'
+    const ambienteMap = {
+      'Pruebas': '00',
+      'Producción': '01',
+    };
+    const ambienteDB = ambienteMap[ambiente] || '00';
+
+    // --- NUEVO: Normalizar booleanos y enteros para evitar fallos al recibir FormData ---
+    const isWhatsappActivo = whatsapp_activado === true || 
+                             whatsapp_activado === 'true' || 
+                             whatsapp_activado === 1 || 
+                             whatsapp_activado === '1';
+    const limitFacturasVal = parseInt(limite_facturas, 10) || 40;
+    const limitWhatsappVal = isWhatsappActivo ? (parseInt(limite_whatsapp, 10) || 0) : 0;
+    // ------------------------------------------------------------------------------------
+
     await pool.query(
       `UPDATE organizaciones SET
         nombre_empresa = ?, nombre_comercial = ?, direccion = ?, 
         telefono = ?, telefono_whatsapp = ?, nit = ?, nrc = ?,
         tipo_contribuyente = ?, tipo_organizacion = ?, ambiente = ?,
-        token_mh = ?, llave_privada_p12 = ?, logo_url = ?
-       WHERE id = ?`,
+        token_mh = ?, llave_privada_p12 = ?, logo_url = ?,
+        id_departamento = ?, id_municipio = ?, direccion_linea = ?, codigo_giro = ?,
+        plan_id = ?, whatsapp_activado = ?, limite_facturas = ?, limite_whatsapp = ?
+      WHERE id = ?`,
       [
         nombre_empresa ? nombre_empresa.trim() : '',
         nombre_comercial ? nombre_comercial.trim() : '',
@@ -261,10 +329,18 @@ exports.actualizarOrganizacion = async (req, res) => {
         nrc ? nrc.trim() : '',
         tipo_contribuyente || 'Pequeño',
         tipo_organizacion || 'Empresa Comercial',
-        ambiente || 'Pruebas',
+        ambienteDB,
         token_mh || null,
         llave_privada_p12 || null,
-        logo_url ? logo_url.trim() : '',
+        logoUrlFinal,
+        id_departamento || null,
+        id_municipio || null,
+        direccion_linea || null,
+        codigo_giro || '62010',
+        plan_id || 1,
+        isWhatsappActivo ? 1 : 0,
+        limitFacturasVal,
+        limitWhatsappVal,
         id
       ]
     );
@@ -2196,5 +2272,146 @@ exports.eliminarIngreso = async (req, res) => {
   } catch (error) {
     console.error('Error al eliminar ingreso:', error);
     res.status(500).json({ message: 'Error al eliminar ingreso', error: error.message });
+  }
+};
+
+// Añadir esta función al controlador
+exports.subirLogoOrganizacion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!req.file) {
+      return res.status(400).json({ message: 'No se subió ningún archivo' });
+    }
+    const logoUrl = `/uploads/logos/${req.file.filename}`;
+    await pool.query(
+      'UPDATE organizaciones SET logo_url = ? WHERE id = ? AND nombre_empresa != "SuperAdmin"',
+      [logoUrl, id]
+    );
+    res.json({ message: 'Logo actualizado', logoUrl });
+  } catch (error) {
+    console.error('Error al subir logo:', error);
+    res.status(500).json({ message: 'Error al subir logo' });
+  }
+};
+
+exports.obtenerPlanes = async (req, res) => {
+  try {
+    const planes = await Plan.findAll();
+    res.json(planes);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener planes' });
+  }
+};
+
+exports.asignarPlanOrganizacion = async (req, res) => {
+  const { id } = req.params;
+  const { plan_id } = req.body;
+  const usuario_id = req.usuario_id;
+
+  try {
+    // Obtener plan actual
+    const [org] = await pool.query('SELECT plan_id FROM organizaciones WHERE id = ?', [id]);
+    const planAnterior = org[0]?.plan_id;
+
+    await pool.query(
+      'UPDATE organizaciones SET plan_id = ?, fecha_inicio_plan = CURDATE() WHERE id = ?',
+      [plan_id, id]
+    );
+
+    // Registrar historial
+    if (planAnterior && planAnterior !== plan_id) {
+      await pool.query(
+        `INSERT INTO historial_cambios_plan (organizacion_id, plan_anterior_id, plan_nuevo_id, usuario_id)
+         VALUES (?, ?, ?, ?)`,
+        [id, planAnterior, plan_id, usuario_id]
+      );
+    }
+
+    res.json({ message: 'Plan actualizado' });
+  } catch (error) {
+    console.error('Error al asignar plan:', error);
+    res.status(500).json({ message: 'Error al asignar plan' });
+  }
+};
+
+exports.obtenerConsumoMensual = async (req, res) => {
+  const { id } = req.params;
+  const { mes, anio } = req.query;
+  const mesActual = mes || new Date().getMonth() + 1;
+  const anioActual = anio || new Date().getFullYear();
+
+  try {
+    // Obtener plan de la organización
+    const [org] = await pool.query(
+      `SELECT o.plan_id, p.limite_facturas_mensuales, p.limite_whatsapp_mensual 
+       FROM organizaciones o 
+       JOIN planes p ON o.plan_id = p.id 
+       WHERE o.id = ?`,
+      [id]
+    );
+
+    // Obtener consumo actual
+    let [consumo] = await pool.query(
+      `SELECT facturas_generadas, whatsapp_enviados 
+       FROM consumo_mensual_organizacion 
+       WHERE organizacion_id = ? AND mes = ? AND anio = ?`,
+      [id, mesActual, anioActual]
+    );
+
+    if (!consumo || consumo.length === 0) {
+      consumo = { facturas_generadas: 0, whatsapp_enviados: 0 };
+    } else {
+      consumo = consumo[0];
+    }
+
+    res.json({
+      plan: org[0],
+      consumo,
+      restantes: {
+        facturas: Math.max(0, org[0].limite_facturas_mensuales - consumo.facturas_generadas),
+        whatsapp: Math.max(0, org[0].limite_whatsapp_mensual - consumo.whatsapp_enviados),
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener consumo:', error);
+    res.status(500).json({ message: 'Error al obtener consumo' });
+  }
+};
+
+exports.obtenerConsumoGlobal = async (req, res) => {
+  try {
+    const { anio } = req.query;
+    const year = anio || new Date().getFullYear();
+
+    const [rows] = await pool.query(`
+      SELECT 
+        o.id AS organizacion_id,
+        o.nombre_empresa,
+        c.mes,
+        c.anio,
+        c.facturas_generadas,
+        c.whatsapp_enviados,
+        p.limite_facturas_mensuales,
+        p.limite_whatsapp_mensual
+      FROM consumo_mensual_organizacion c
+      JOIN organizaciones o ON c.organizacion_id = o.id
+      JOIN planes p ON o.plan_id = p.id
+      WHERE c.anio = ?
+      ORDER BY o.id, c.mes
+    `, [year]);
+
+    res.json(rows);
+  } catch (error) {
+    console.error('Error al obtener consumo global:', error);
+    res.status(500).json({ message: 'Error al obtener consumo' });
+  }
+};
+
+exports.obtenerPlanes = async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM planes WHERE activo = 1 ORDER BY precio');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener planes' });
   }
 };

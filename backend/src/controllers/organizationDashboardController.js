@@ -379,3 +379,40 @@ exports.obtenerMiOrganizacion = async (req, res) => {
     res.status(500).json({ message: 'Error al obtener organización', error: error.message });
   }
 };
+
+exports.obtenerMiConsumo = async (req, res) => {
+  const organizacion_id = req.organizacion_id;
+  try {
+    // Obtener límites de la organización
+    const [org] = await pool.query(
+      'SELECT limite_facturas, limite_whatsapp, whatsapp_activado FROM organizaciones WHERE id = ?',
+      [organizacion_id]
+    );
+    if (!org || org.length === 0) {
+      return res.status(404).json({ message: 'Organización no encontrada' });
+    }
+
+    // Obtener consumo actual
+    const mes = new Date().getMonth() + 1;
+    const anio = new Date().getFullYear();
+    const [consumo] = await pool.query(
+      'SELECT facturas_generadas, whatsapp_enviados FROM consumo_mensual_organizacion WHERE organizacion_id = ? AND mes = ? AND anio = ?',
+      [organizacion_id, mes, anio]
+    );
+
+    const facturas = {
+      total: consumo && consumo.length > 0 ? parseInt(consumo[0].facturas_generadas) : 0,
+      limite: parseInt(org[0].limite_facturas) || 40,
+    };
+    const whatsapp = {
+      total: consumo && consumo.length > 0 ? parseInt(consumo[0].whatsapp_enviados) : 0,
+      limite: parseInt(org[0].limite_whatsapp) || 200,
+      activado: org[0].whatsapp_activado === 1,
+    };
+
+    res.json({ factura: facturas, whatsapp });
+  } catch (error) {
+    console.error('Error al obtener consumo:', error);
+    res.status(500).json({ message: 'Error al obtener consumo' });
+  }
+};

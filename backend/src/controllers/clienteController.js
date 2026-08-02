@@ -90,11 +90,18 @@ exports.crearCliente = async (req, res) => {
     // Normalizar teléfonos
     if (data.telefono) data.telefono = normalizarTelefono(data.telefono);
     if (data.telefono_whatsapp) data.telefono_whatsapp = normalizarTelefono(data.telefono_whatsapp);
-    // Validar duplicados de NIT
+
     if (data.nit) {
       const exists = await Cliente.existsNit(data.nit, organizacion_id);
       if (exists) {
         return res.status(400).json({ message: 'El NIT ya está registrado para esta organización' });
+      }
+    }
+
+    if (data.dui) {
+      const existsDui = await Cliente.existsDui(data.dui, organizacion_id);
+      if (existsDui) {
+        return res.status(400).json({ message: 'El DUI ya está registrado para esta organización' });
       }
     }
 
@@ -131,6 +138,14 @@ exports.actualizarCliente = async (req, res) => {
       const exists = await Cliente.existsNit(data.nit, organizacion_id, id);
       if (exists) {
         return res.status(400).json({ message: 'El NIT ya está registrado para esta organización' });
+      }
+    }
+
+    // ✅ Validar duplicados de DUI
+    if (data.dui && data.dui !== cliente.dui) {
+      const existsDui = await Cliente.existsDui(data.dui, organizacion_id, id);
+      if (existsDui) {
+        return res.status(400).json({ message: 'El DUI ya está registrado para esta organización' });
       }
     }
 

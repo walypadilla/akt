@@ -1053,6 +1053,60 @@ exports.exportarReporte = async (req, res) => {
       filename = 'top_cambios_precio.csv';
     }
 
+    // ========== MOVIMIENTOS PRODUCTO (ENTRADAS/SALIDAS) ==========
+    else if (tipo === 'movimientos-producto') {
+      let sql = `
+        SELECT 
+          p.nombre AS producto,
+          p.codigo_sku AS sku,
+          COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'Entrada' THEN m.cantidad ELSE 0 END), 0) AS total_entradas,
+          COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'Salida' THEN m.cantidad ELSE 0 END), 0) AS total_salidas,
+          COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'Entrada' THEN m.cantidad ELSE 0 END) - SUM(CASE WHEN m.tipo_movimiento = 'Salida' THEN m.cantidad ELSE 0 END), 0) AS saldo
+        FROM movimientos_inventario m
+        JOIN productos p ON m.producto_id = p.id
+        WHERE m.organizacion_id = ?
+      `;
+      const params = [organizacion_id];
+
+      // Si vienen ambas fechas válidas, filtra por rango; si no, consulta todo el historial
+      if (fecha_inicio && fecha_fin) {
+        const dInicio = new Date(fecha_inicio);
+        const dFin = new Date(fecha_fin);
+        if (isNaN(dInicio) || isNaN(dFin)) {
+          throw new Error('Fechas inválidas');
+        }
+        if (dInicio > dFin) {
+          throw new Error('La fecha de inicio no puede ser mayor a la fecha final');
+        }
+        sql += ` AND m.created_at BETWEEN ? AND ?`;
+        params.push(`${fecha_inicio} 00:00:00`, `${fecha_fin} 23:59:59`);
+      }
+
+      sql += `
+        GROUP BY p.id, p.nombre, p.codigo_sku
+        HAVING total_entradas > 0 OR total_salidas > 0
+        ORDER BY p.nombre
+      `;
+
+      const [rows] = await pool.query(sql, params);
+
+      if (rows.length === 0) {
+        return res.status(404).json({ message: 'No hay movimientos registrados para mostrar' });
+      }
+
+      data = rows.map(r => ({
+        Producto: r.producto,
+        SKU: r.sku || '',
+        'Total Entradas': r.total_entradas,
+        'Total Salidas': r.total_salidas,
+        Saldo: r.saldo,
+      }));
+
+      const sufijoFecha = (fecha_inicio && fecha_fin) ? `_${fecha_inicio}_${fecha_fin}` : '_historico_completo';
+      filename = `movimientos_producto${sufijoFecha}.csv`;
+      tituloReporte = 'ENTRADAS Y SALIDAS POR PRODUCTO';
+    }
+
     else {
       return res.status(400).json({ message: 'Tipo de reporte inválido' });
     }
@@ -1068,10 +1122,11 @@ exports.exportarReporte = async (req, res) => {
     else if (tipo === 'lento-movimiento') tituloReporte = 'MERCANCÍA DE LENTO MOVIMIENTO';
     else if (tipo === 'valoracion') tituloReporte = 'VALORACIÓN DE INVENTARIO';
     else if (tipo === 'top-cambios-precio') tituloReporte = 'TOP 30 CAMBIOS DE PRECIO';
+    else if (tipo === 'movimientos-producto') tituloReporte = 'ENTRADAS SALIDAS'
 
     const headers = Object.keys(data[0]);
     let csv = '\uFEFF'; 
-    csv += 'sep=;\n';   
+    csv += tituloReporte +'\n';   
     csv += headers.join(';') + '\n'; 
 
     for (const row of data) {
@@ -1804,6 +1859,69 @@ exports.getAniosDisponibles = async (req, res) => {
   } catch (error) {
     console.error('❌ [getAniosDisponibles] Error:', error);
     res.status(500).json({ message: 'Error al obtener años disponibles', error: error.message });
+  }
+};
+
+exports.exportarMovimientosProducto = async (req, res) => {
+  try {
+    const organizacion_id = req.organizacion_id;
+    const { fecha_inicio, fecha_fin } = req.query;
+
+    let sql = `
+      SELECT 
+        p.nombre AS producto,
+        p.codigo_sku AS sku,
+        COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'Entrada' THEN m.cantidad ELSE 0 END), 0) AS total_entradas,
+        COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'Salida' THEN m.cantidad ELSE 0 END), 0) AS total_salidas,
+        COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'Entrada' THEN m.cantidad ELSE 0 END) - SUM(CASE WHEN m.tipo_movimiento = 'Salida' THEN m.cantidad ELSE 0 END), 0) AS saldo
+      FROM movimientos_inventario m
+      JOIN productos p ON m.producto_id = p.id
+      WHERE m.organizacion_id = ?
+    `;
+    const params = [organizacion_id];
+
+    // Si vienen ambas fechas válidas, filtra por rango; si no, consulta todo el historial
+    if (fecha_inicio && fecha_fin) {
+      const dInicio = new Date(fecha_inicio);
+      const dFin = new Date(fecha_fin);
+      if (isNaN(dInicio) || isNaN(dFin)) {
+        return res.status(400).json({ message: 'Fechas inválidas' });
+      }
+      if (dInicio > dFin) {
+        return res.status(400).json({ message: 'La fecha de inicio no puede ser mayor a la fecha final' });
+      }
+      sql += ` AND m.created_at BETWEEN ? AND ?`;
+      params.push(`${fecha_inicio} 00:00:00`, `${fecha_fin} 23:59:59`);
+    }
+
+    sql += `
+      GROUP BY p.id, p.nombre, p.codigo_sku
+      HAVING total_entradas > 0 OR total_salidas > 0
+      ORDER BY p.nombre
+    `;
+
+    const [rows] = await pool.query(sql, params);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'No hay movimientos registrados para mostrar' });
+    }
+
+    const headers = ['Producto', 'SKU', 'Total Entradas', 'Total Salidas', 'Saldo'];
+    let csv = '\uFEFFsep=;\n' + headers.join(';') + '\n';
+    for (const row of rows) {
+      csv += `${row.producto};${row.sku || ''};${row.total_entradas};${row.total_salidas};${row.saldo}\n`;
+    }
+
+    const sufijoFecha = (fecha_inicio && fecha_fin) ? `_${fecha_inicio}_${fecha_fin}` : '_historico_completo';
+    const filename = `movimientos_producto${sufijoFecha}.csv`;
+    
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(csv);
+
+  } catch (error) {
+    console.error('❌ [exportarMovimientosProducto] Error:', error);
+    res.status(500).json({ message: 'Error al exportar', error: error.message });
   }
 };
 

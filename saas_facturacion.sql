@@ -198,7 +198,7 @@ CREATE TABLE `categorias` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_categoria_org` (`organizacion_id`,`nombre`),
   CONSTRAINT `categorias_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -207,8 +207,45 @@ CREATE TABLE `categorias` (
 
 LOCK TABLES `categorias` WRITE;
 /*!40000 ALTER TABLE `categorias` DISABLE KEYS */;
-INSERT INTO `categorias` VALUES (1,6,'Contruccion',NULL,NULL,1,'2026-07-21 21:34:09'),(2,6,'Refrescos',NULL,NULL,1,'2026-07-21 21:39:20'),(3,6,'Snack',NULL,NULL,1,'2026-07-21 21:47:12'),(4,6,'Limpieza',NULL,NULL,1,'2026-07-21 22:14:01'),(5,6,'Cereales',NULL,NULL,1,'2026-07-21 23:11:30'),(6,1,'Suscripcion',NULL,NULL,1,'2026-07-21 23:42:08'),(7,6,'Comestibles',NULL,NULL,1,'2026-07-22 00:47:07'),(8,6,'Nescafe',NULL,NULL,1,'2026-07-22 00:54:28'),(9,2,'comestibles',NULL,NULL,1,'2026-07-28 15:43:15'),(10,7,'comestibles',NULL,NULL,1,'2026-07-28 16:33:47');
+INSERT INTO `categorias` VALUES (1,6,'Contruccion',NULL,NULL,1,'2026-07-21 21:34:09'),(2,6,'Refrescos',NULL,NULL,1,'2026-07-21 21:39:20'),(3,6,'Snack',NULL,NULL,1,'2026-07-21 21:47:12'),(4,6,'Limpieza',NULL,NULL,1,'2026-07-21 22:14:01'),(5,6,'Cereales',NULL,NULL,1,'2026-07-21 23:11:30'),(6,1,'Suscripcion',NULL,NULL,1,'2026-07-21 23:42:08'),(7,6,'Comestibles',NULL,NULL,1,'2026-07-22 00:47:07'),(8,6,'Nescafe',NULL,NULL,1,'2026-07-22 00:54:28'),(9,2,'comestibles',NULL,NULL,1,'2026-07-28 15:43:15'),(10,7,'comestibles',NULL,NULL,1,'2026-07-28 16:33:47'),(11,8,'Comestibles',NULL,NULL,1,'2026-08-01 05:02:36');
 /*!40000 ALTER TABLE `categorias` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `citas`
+--
+
+DROP TABLE IF EXISTS `citas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `citas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `paciente_id` int NOT NULL,
+  `medico_id` int NOT NULL,
+  `fecha_hora` datetime NOT NULL,
+  `duracion_minutos` int DEFAULT '30',
+  `estado` enum('Programada','Confirmada','En Espera','Atendida','Cancelada') DEFAULT 'Programada',
+  `observaciones` text,
+  `recordatorio_enviado` tinyint(1) DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `paciente_id` (`paciente_id`),
+  KEY `medico_id` (`medico_id`),
+  CONSTRAINT `citas_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `citas_ibfk_2` FOREIGN KEY (`paciente_id`) REFERENCES `pacientes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `citas_ibfk_3` FOREIGN KEY (`medico_id`) REFERENCES `medicos` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `citas`
+--
+
+LOCK TABLES `citas` WRITE;
+/*!40000 ALTER TABLE `citas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `citas` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -237,13 +274,13 @@ CREATE TABLE `clientes` (
   `activo` tinyint(1) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `dui` (`dui`),
   UNIQUE KEY `unique_org_nit` (`organizacion_id`,`nit`),
+  UNIQUE KEY `unique_organizacion_dui` (`organizacion_id`,`dui`),
   KEY `idx_clientes_org` (`organizacion_id`),
   KEY `id_departamento` (`id_departamento`,`id_municipio`),
   CONSTRAINT `clientes_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
   CONSTRAINT `clientes_ibfk_2` FOREIGN KEY (`id_departamento`, `id_municipio`) REFERENCES `municipios` (`id_departamento`, `id_municipio`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=45 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=47 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -252,7 +289,7 @@ CREATE TABLE `clientes` (
 
 LOCK TABLES `clientes` WRITE;
 /*!40000 ALTER TABLE `clientes` DISABLE KEYS */;
-INSERT INTO `clientes` VALUES (1,2,'CLIENTE MEMBRESÍA',NULL,'N/A',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(4,2,'Empresa de prueba',NULL,'0804-0123-101-4',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(5,4,'gffg',NULL,'0804-0123-101-6',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(6,5,'Empresa de prueba01',NULL,'0804-0123-101-7',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(9,4,'gffg',NULL,'0804-0123-101-9',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(21,6,'MK sor',NULL,'0804-0123-101-6',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(38,6,'walter Padilla','052920550','06070809090909','09008098','62010','Exento','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','20202020','walter04padilla@gmail.com','+50371409012','12','11','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9',1,'2026-07-25 21:43:11'),(39,6,'Pago de Membresia','052920551','03344544545444','34455655','96090','Pequeño','Colonia ','12234566','padilla@gmail.com','+50371409012','14','09','Colonia ',1,'2026-07-25 21:46:53'),(40,6,'walter Padilla','052920557',NULL,NULL,NULL,'Exento',NULL,'71409012','walteradilla@gmail.com','+50371409012','05','10','Colonia Divina P',1,'2026-07-25 21:48:20'),(41,2,'walter Padilla','052920555','052920955',NULL,NULL,'Exento','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','+50371409012','walter04padilla@gmail.com','+50371409012','06','11','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9',1,'2026-07-28 16:15:04'),(43,7,'walter Padilla','052920556',NULL,NULL,NULL,'Exento','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','+50371409012','walter04padilla@gmail.com','+50371409012','06','08','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9',1,'2026-07-28 16:33:08');
+INSERT INTO `clientes` VALUES (1,2,'CLIENTE MEMBRESÍA',NULL,'N/A',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(4,2,'Empresa de prueba',NULL,'0804-0123-101-4',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(5,4,'gffg',NULL,'0804-0123-101-6',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(6,5,'Empresa de prueba01',NULL,'0804-0123-101-7',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(9,4,'gffg',NULL,'0804-0123-101-9',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(21,6,'MK sor',NULL,'0804-0123-101-6',NULL,NULL,'Exento',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-25 21:07:33'),(38,6,'walter Padilla','052920550','06070809090909','09008098','62010','Exento','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','20202020','walter04padilla@gmail.com','+50371409012','12','11','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9',1,'2026-07-25 21:43:11'),(39,6,'Pago de Membresia','052920551','03344544545444','34455655','96090','Pequeño','Colonia ','12234566','padilla@gmail.com','+50371409012','14','09','Colonia ',1,'2026-07-25 21:46:53'),(40,6,'walter Padilla','052920557',NULL,NULL,NULL,'Exento',NULL,'71409012','walteradilla@gmail.com','+50371409012','05','10','Colonia Divina P',1,'2026-07-25 21:48:20'),(41,2,'walter Padilla','052920555','052920955',NULL,NULL,'Exento','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','+50371409012','walter04padilla@gmail.com','+50371409012','06','11','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9',1,'2026-07-28 16:15:04'),(43,7,'walter Padilla','052920556',NULL,NULL,NULL,'Exento','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','+50371409012','walter04padilla@gmail.com','+50371409012','06','08','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9',1,'2026-07-28 16:33:08'),(46,8,'walter Padilla','052920555',NULL,NULL,NULL,'Exento','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','+50371409012','walter04padilla@gmail.com','+50371409012','12','11','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9',1,'2026-08-01 05:03:09');
 /*!40000 ALTER TABLE `clientes` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -291,7 +328,7 @@ CREATE TABLE `compras_gastos` (
   KEY `proveedor_id` (`proveedor_id`),
   CONSTRAINT `compras_gastos_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
   CONSTRAINT `compras_gastos_ibfk_2` FOREIGN KEY (`proveedor_id`) REFERENCES `proveedores` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -300,7 +337,7 @@ CREATE TABLE `compras_gastos` (
 
 LOCK TABLES `compras_gastos` WRITE;
 /*!40000 ALTER TABLE `compras_gastos` DISABLE KEYS */;
-INSERT INTO `compras_gastos` VALUES (1,6,'Julian alvarez','Credito_Fiscal','TDS_09489393',NULL,NULL,'Compra',NULL,17.12,2.23,19.35,NULL,'2026-06-24',1,'Factura','Pagado','Credito','2026-07-25',0.00,0.00,0),(2,6,'Julian Alvarez','Credito_Fiscal','TDS_09489398',NULL,NULL,'Compra','entrada de productos basicos',21.20,2.76,23.96,NULL,'2026-07-26',2,'Factura','Pagado','Contado',NULL,0.00,0.00,0),(3,6,'Tamalera','Credito_Fiscal','TDS_094893',NULL,NULL,'Gasto_Operativo',NULL,67.50,8.78,76.28,NULL,'2026-07-17',3,'Factura','Pagado','Contado',NULL,0.00,0.00,0),(4,6,'Julian tamal','Consumidor_Final','TDS_0948973',NULL,NULL,'Compra',NULL,25.68,0.00,25.68,NULL,'2026-07-26',2,'Factura','Pagado','Contado',NULL,0.00,0.00,0),(5,6,'Salamanca','Credito_Fiscal','TDS_09489393',NULL,NULL,'Compra',NULL,28.20,3.67,31.87,NULL,'2026-07-26',3,'Factura','Pagado','Credito','2026-07-31',0.00,0.00,0),(6,6,'Julian tamal','Consumidor_Final','TDS_0948973',NULL,NULL,'Compra',NULL,7.32,0.00,7.32,NULL,'2026-07-26',2,'Factura','Pagado','Credito','2026-07-31',0.00,0.00,0),(7,6,'Salamanca','Credito_Fiscal','TDS_09489393',NULL,NULL,'Compra',NULL,1.80,0.23,2.03,NULL,'2026-07-27',2,'Factura','Pagado','Contado',NULL,0.00,0.00,0),(8,6,'Julian alvarez','Consumidor_Final','TDS_09489393','09090990909090909098909809009090','DTE09990909090909098980980','Compra',NULL,19.50,0.00,19.50,NULL,'2026-07-27',2,'Factura','Pagado','Contado',NULL,0.00,0.00,0);
+INSERT INTO `compras_gastos` VALUES (1,6,'Julian alvarez','Credito_Fiscal','TDS_09489393',NULL,NULL,'Compra',NULL,17.12,2.23,19.35,NULL,'2026-06-24',1,'Factura','Pagado','Credito','2026-07-25',0.00,0.00,0),(2,6,'Julian Alvarez','Credito_Fiscal','TDS_09489398',NULL,NULL,'Compra','entrada de productos basicos',21.20,2.76,23.96,NULL,'2026-07-26',2,'Factura','Pagado','Contado',NULL,0.00,0.00,0),(3,6,'Tamalera','Credito_Fiscal','TDS_094893',NULL,NULL,'Gasto_Operativo',NULL,67.50,8.78,76.28,NULL,'2026-07-17',3,'Factura','Pagado','Contado',NULL,0.00,0.00,0),(4,6,'Julian tamal','Consumidor_Final','TDS_0948973',NULL,NULL,'Compra',NULL,25.68,0.00,25.68,NULL,'2026-07-26',2,'Factura','Pagado','Contado',NULL,0.00,0.00,0),(5,6,'Salamanca','Credito_Fiscal','TDS_09489393',NULL,NULL,'Compra',NULL,28.20,3.67,31.87,NULL,'2026-07-26',3,'Factura','Pagado','Credito','2026-07-31',0.00,0.00,0),(6,6,'Julian tamal','Consumidor_Final','TDS_0948973',NULL,NULL,'Compra',NULL,7.32,0.00,7.32,NULL,'2026-07-26',2,'Factura','Pagado','Credito','2026-07-31',0.00,0.00,0),(7,6,'Salamanca','Credito_Fiscal','TDS_09489393',NULL,NULL,'Compra',NULL,1.80,0.23,2.03,NULL,'2026-07-27',2,'Factura','Pagado','Contado',NULL,0.00,0.00,0),(8,6,'Julian alvarez','Consumidor_Final','TDS_09489393','09090990909090909098909809009090','DTE09990909090909098980980','Compra',NULL,19.50,0.00,19.50,NULL,'2026-07-27',2,'Factura','Pagado','Contado',NULL,0.00,0.00,0),(9,7,'Salamanca','Credito_Fiscal','TDS_09489393',NULL,NULL,'Compra',NULL,16.50,2.15,18.65,NULL,'2026-07-31',4,'Factura','Pendiente','Contado',NULL,0.00,0.00,0),(10,7,'Salamanca','Credito_Fiscal','TDS_09489393',NULL,NULL,'Compra',NULL,26.00,3.38,29.38,NULL,'2026-07-31',4,'Factura','Pagado','Contado',NULL,0.00,0.00,0);
 /*!40000 ALTER TABLE `compras_gastos` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -341,6 +378,86 @@ INSERT INTO `configuracion_saas` VALUES (1,1,'Mi SaaS de Facturación','Facturac
 UNLOCK TABLES;
 
 --
+-- Table structure for table `consultas`
+--
+
+DROP TABLE IF EXISTS `consultas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `consultas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `cita_id` int DEFAULT NULL,
+  `paciente_id` int NOT NULL,
+  `medico_id` int NOT NULL,
+  `fecha_consulta` datetime NOT NULL,
+  `subjetivo` text,
+  `objetivo` text,
+  `analisis` text,
+  `plan` text,
+  `presion_arterial` varchar(20) DEFAULT NULL,
+  `frecuencia_cardiaca` int DEFAULT NULL,
+  `temperatura` decimal(4,1) DEFAULT NULL,
+  `peso` decimal(5,2) DEFAULT NULL,
+  `talla` decimal(5,2) DEFAULT NULL,
+  `imc` decimal(5,2) DEFAULT NULL,
+  `diagnostico_codigo` varchar(20) DEFAULT NULL,
+  `diagnostico_texto` text,
+  `receta` text,
+  `vacunas_aplicadas` json DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `cita_id` (`cita_id`),
+  KEY `paciente_id` (`paciente_id`),
+  KEY `medico_id` (`medico_id`),
+  CONSTRAINT `consultas_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `consultas_ibfk_2` FOREIGN KEY (`cita_id`) REFERENCES `citas` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `consultas_ibfk_3` FOREIGN KEY (`paciente_id`) REFERENCES `pacientes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `consultas_ibfk_4` FOREIGN KEY (`medico_id`) REFERENCES `medicos` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `consultas`
+--
+
+LOCK TABLES `consultas` WRITE;
+/*!40000 ALTER TABLE `consultas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `consultas` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `consumo_mensual_organizacion`
+--
+
+DROP TABLE IF EXISTS `consumo_mensual_organizacion`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `consumo_mensual_organizacion` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `mes` int NOT NULL,
+  `anio` int NOT NULL,
+  `facturas_generadas` int DEFAULT '0',
+  `whatsapp_enviados` int DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_consumo` (`organizacion_id`,`mes`,`anio`),
+  CONSTRAINT `consumo_mensual_organizacion_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `consumo_mensual_organizacion`
+--
+
+LOCK TABLES `consumo_mensual_organizacion` WRITE;
+/*!40000 ALTER TABLE `consumo_mensual_organizacion` DISABLE KEYS */;
+INSERT INTO `consumo_mensual_organizacion` VALUES (1,7,7,2026,1,0),(5,8,7,2026,1,0),(6,8,8,2026,1,0);
+/*!40000 ALTER TABLE `consumo_mensual_organizacion` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `costos_historicos`
 --
 
@@ -364,7 +481,7 @@ CREATE TABLE `costos_historicos` (
   CONSTRAINT `costos_historicos_ibfk_1` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `costos_historicos_ibfk_2` FOREIGN KEY (`proveedor_id`) REFERENCES `proveedores` (`id`) ON DELETE SET NULL,
   CONSTRAINT `costos_historicos_ibfk_3` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -373,7 +490,7 @@ CREATE TABLE `costos_historicos` (
 
 LOCK TABLES `costos_historicos` WRITE;
 /*!40000 ALTER TABLE `costos_historicos` DISABLE KEYS */;
-INSERT INTO `costos_historicos` VALUES (1,4,NULL,10.00,12.00,'Actualizacion de precio por proveedor',8,'2026-07-22 05:50:41',NULL),(2,4,NULL,12.00,13.02,'Ajuste por proveedor',8,'2026-07-22 06:28:59',NULL),(3,19,NULL,3.00,3.49,'Ajuste de Proveedor',8,'2026-07-22 13:58:25',NULL),(4,9,NULL,0.37,0.39,'Aumento',8,'2026-07-23 05:43:12',''),(5,9,NULL,0.39,0.38,'Rebaja',8,'2026-07-23 05:46:32','');
+INSERT INTO `costos_historicos` VALUES (1,4,NULL,10.00,12.00,'Actualizacion de precio por proveedor',8,'2026-07-22 05:50:41',NULL),(2,4,NULL,12.00,13.02,'Ajuste por proveedor',8,'2026-07-22 06:28:59',NULL),(3,19,NULL,3.00,3.49,'Ajuste de Proveedor',8,'2026-07-22 13:58:25',NULL),(4,9,NULL,0.37,0.39,'Aumento',8,'2026-07-23 05:43:12',''),(5,9,NULL,0.39,0.38,'Rebaja',8,'2026-07-23 05:46:32',''),(6,24,NULL,0.18,0.21,'Aumento',11,'2026-07-31 00:57:35',''),(7,23,4,2.00,2.02,'Aumento',11,'2026-07-31 02:06:00','');
 /*!40000 ALTER TABLE `costos_historicos` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -420,7 +537,7 @@ CREATE TABLE `detalles_compra` (
   KEY `producto_id` (`producto_id`),
   CONSTRAINT `detalles_compra_ibfk_1` FOREIGN KEY (`compra_gasto_id`) REFERENCES `compras_gastos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `detalles_compra_ibfk_2` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -429,7 +546,7 @@ CREATE TABLE `detalles_compra` (
 
 LOCK TABLES `detalles_compra` WRITE;
 /*!40000 ALTER TABLE `detalles_compra` DISABLE KEYS */;
-INSERT INTO `detalles_compra` VALUES (1,1,10,10.00,0.20,2.00),(2,1,9,6.00,0.60,3.60),(3,1,8,4.00,2.88,11.52),(4,2,18,12.00,0.60,7.20),(5,2,16,40.00,0.35,14.00),(6,3,13,50.00,1.35,67.50),(7,4,9,24.00,0.35,8.40),(8,4,8,6.00,2.88,17.28),(9,5,18,8.00,0.25,2.00),(10,5,8,8.00,2.90,23.20),(11,5,9,5.00,0.60,3.00),(12,6,16,7.00,0.36,2.52),(13,6,18,12.00,0.40,4.80),(14,7,19,3.00,0.60,1.80),(15,8,20,10.00,1.95,19.50);
+INSERT INTO `detalles_compra` VALUES (1,1,10,10.00,0.20,2.00),(2,1,9,6.00,0.60,3.60),(3,1,8,4.00,2.88,11.52),(4,2,18,12.00,0.60,7.20),(5,2,16,40.00,0.35,14.00),(6,3,13,50.00,1.35,67.50),(7,4,9,24.00,0.35,8.40),(8,4,8,6.00,2.88,17.28),(9,5,18,8.00,0.25,2.00),(10,5,8,8.00,2.90,23.20),(11,5,9,5.00,0.60,3.00),(12,6,16,7.00,0.36,2.52),(13,6,18,12.00,0.40,4.80),(14,7,19,3.00,0.60,1.80),(15,8,20,10.00,1.95,19.50),(16,10,23,10.00,2.60,26.00);
 /*!40000 ALTER TABLE `detalles_compra` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -456,7 +573,7 @@ CREATE TABLE `detalles_factura` (
   KEY `producto_id` (`producto_id`),
   CONSTRAINT `detalles_factura_ibfk_1` FOREIGN KEY (`factura_id`) REFERENCES `facturas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `detalles_factura_ibfk_2` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=44 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -465,7 +582,7 @@ CREATE TABLE `detalles_factura` (
 
 LOCK TABLES `detalles_factura` WRITE;
 /*!40000 ALTER TABLE `detalles_factura` DISABLE KEYS */;
-INSERT INTO `detalles_factura` VALUES (1,1,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(2,1,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(3,1,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(4,2,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(5,3,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(6,4,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(7,5,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(8,6,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(9,7,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(10,1,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(11,2,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(12,2,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(26,16,13,4.00,4.60,18.40,2.39,'Gravado',0.00,'Unidad'),(27,17,8,5.00,2.88,14.40,1.87,'Gravado',0.00,'Unidad'),(28,18,9,10.00,0.60,6.00,0.78,'Gravado',0.00,'Unidad'),(29,19,21,1.00,2.16,2.16,0.28,'Gravado',0.00,'Unidad'),(30,20,18,5.00,0.40,2.00,0.26,'Gravado',0.00,'Unidad'),(31,21,21,1.00,2.16,2.16,0.28,'Gravado',0.00,'Unidad'),(32,22,22,1.00,5.50,5.50,0.72,'Gravado',0.00,'Unidad'),(33,23,23,1.00,2.75,2.75,0.36,'Gravado',0.00,'Unidad'),(34,24,23,4.00,2.75,11.00,1.43,'Gravado',0.00,'Unidad');
+INSERT INTO `detalles_factura` VALUES (1,1,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(2,1,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(3,1,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(4,2,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(5,3,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(6,4,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(7,5,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(8,6,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(9,7,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(10,1,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(11,2,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(12,2,2,1.00,10.00,10.00,1.30,'Gravado',0.00,'59'),(26,16,13,4.00,4.60,18.40,2.39,'Gravado',0.00,'Unidad'),(27,17,8,5.00,2.88,14.40,1.87,'Gravado',0.00,'Unidad'),(28,18,9,10.00,0.60,6.00,0.78,'Gravado',0.00,'Unidad'),(29,19,21,1.00,2.16,2.16,0.28,'Gravado',0.00,'Unidad'),(30,20,18,5.00,0.40,2.00,0.26,'Gravado',0.00,'Unidad'),(31,21,21,1.00,2.16,2.16,0.28,'Gravado',0.00,'Unidad'),(32,22,22,1.00,5.50,5.50,0.72,'Gravado',0.00,'Unidad'),(33,23,23,1.00,2.75,2.75,0.36,'Gravado',0.00,'Unidad'),(34,24,23,4.00,2.75,11.00,1.43,'Gravado',0.00,'Unidad'),(38,28,23,6.00,2.75,16.50,2.15,'Gravado',0.00,'Unidad'),(39,29,24,6.00,0.35,2.10,0.27,'Gravado',0.00,'Unidad'),(40,30,14,1.00,80.00,80.00,10.40,'Gravado',0.00,'59'),(41,30,14,1.00,80.00,80.00,10.40,'Gravado',0.00,'59'),(42,31,25,3.00,2.40,7.20,0.94,'Gravado',0.00,'Unidad'),(43,32,25,1.00,2.40,2.40,0.31,'Gravado',0.00,'Unidad');
 /*!40000 ALTER TABLE `detalles_factura` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -537,6 +654,72 @@ LOCK TABLES `etiquetas` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `examenes`
+--
+
+DROP TABLE IF EXISTS `examenes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `examenes` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `nombre` varchar(100) NOT NULL,
+  `descripcion` text,
+  `precio` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `activo` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `examenes`
+--
+
+LOCK TABLES `examenes` WRITE;
+/*!40000 ALTER TABLE `examenes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `examenes` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `expediente_archivos`
+--
+
+DROP TABLE IF EXISTS `expediente_archivos`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `expediente_archivos` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `paciente_id` int NOT NULL,
+  `consulta_id` int DEFAULT NULL,
+  `nombre_archivo` varchar(255) NOT NULL,
+  `url` varchar(255) NOT NULL,
+  `tipo_archivo` varchar(50) DEFAULT NULL,
+  `subido_por` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `paciente_id` (`paciente_id`),
+  KEY `consulta_id` (`consulta_id`),
+  KEY `subido_por` (`subido_por`),
+  CONSTRAINT `expediente_archivos_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `expediente_archivos_ibfk_2` FOREIGN KEY (`paciente_id`) REFERENCES `pacientes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `expediente_archivos_ibfk_3` FOREIGN KEY (`consulta_id`) REFERENCES `consultas` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `expediente_archivos_ibfk_4` FOREIGN KEY (`subido_por`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `expediente_archivos`
+--
+
+LOCK TABLES `expediente_archivos` WRITE;
+/*!40000 ALTER TABLE `expediente_archivos` DISABLE KEYS */;
+/*!40000 ALTER TABLE `expediente_archivos` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `facturas`
 --
 
@@ -591,7 +774,7 @@ CREATE TABLE `facturas` (
   CONSTRAINT `facturas_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `facturas_ibfk_3` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`),
   CONSTRAINT `fk_factura_bodega` FOREIGN KEY (`bodega_id`) REFERENCES `bodegas` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -600,8 +783,82 @@ CREATE TABLE `facturas` (
 
 LOCK TABLES `facturas` WRITE;
 /*!40000 ALTER TABLE `facturas` DISABLE KEYS */;
-INSERT INTO `facturas` VALUES (1,4,NULL,2,9,'FAF','MEM-000001',10.00,0.00,1.30,0.00,0.00,0.00,11.30,'Pagada','2026-07-20 03:27:59',NULL,'Contado',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(2,4,NULL,2,9,'FAF','MEM-000002',20.00,0.00,2.60,0.00,0.00,0.00,22.60,'Pagada','2026-07-21 13:47:57',NULL,'Contado',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(16,6,NULL,7,39,'FAF','FAC-000001',18.40,0.00,2.39,0.00,0.00,0.00,20.79,'Emitida','2026-07-28 00:54:15',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,'03344544545444','052920551','Pago de Membresia',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(17,6,NULL,7,39,'FAF','FAC-000002',14.40,0.00,1.87,0.00,0.00,0.00,16.27,'Emitida','2026-07-28 01:05:18',NULL,'Credito',5,'2026-08-02','[\"Efectivo\"]',NULL,NULL,NULL,'03344544545444','052920551','Pago de Membresia',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(18,6,NULL,7,38,'FAF','FAC-000003',6.00,0.00,0.78,0.00,0.00,0.00,6.78,'Pagada','2026-07-28 01:34:16',NULL,'Credito',3,'2026-07-31','[\"Efectivo\"]',NULL,NULL,NULL,'06070809090909','052920550','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(19,6,NULL,7,40,'FAF','FAC-000004',2.16,0.00,0.28,0.00,0.00,0.00,2.44,'Pagada','2026-07-28 04:38:28',NULL,'Credito',8,'2026-08-05','[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920557','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(20,6,NULL,7,38,'FAF','FAC-000005',2.00,0.00,0.26,0.00,0.00,0.00,2.26,'Pagada','2026-07-28 05:19:35',NULL,'Credito',1,'2026-07-29','[\"Efectivo\"]',NULL,NULL,NULL,'06070809090909','052920550','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(21,6,NULL,7,40,'FAF','FAC-000006',2.16,0.00,0.28,0.00,0.00,0.00,2.44,'Pagada','2026-07-28 06:06:29',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920557','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(22,2,NULL,1,41,'FAF','FAC-000001',5.50,0.00,0.72,0.00,0.00,0.00,6.22,'Emitida','2026-07-28 16:15:36',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,'052920955','052920555','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(23,7,NULL,11,43,'FAF','FAC-000001',2.75,0.00,0.36,0.00,0.00,0.00,3.11,'Pagada','2026-07-28 16:34:07',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920556','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(24,7,NULL,11,43,'FAF','FAC-000002',11.00,0.00,1.43,0.00,0.00,0.00,12.43,'Emitida','2026-07-29 02:56:59',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920556','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL);
+INSERT INTO `facturas` VALUES (1,4,NULL,2,9,'FAF','MEM-000001',10.00,0.00,1.30,0.00,0.00,0.00,11.30,'Pagada','2026-07-20 03:27:59',NULL,'Contado',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(2,4,NULL,2,9,'FAF','MEM-000002',20.00,0.00,2.60,0.00,0.00,0.00,22.60,'Pagada','2026-07-21 13:47:57',NULL,'Contado',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(16,6,NULL,7,39,'FAF','FAC-000001',18.40,0.00,2.39,0.00,0.00,0.00,20.79,'Emitida','2026-07-28 00:54:15',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,'03344544545444','052920551','Pago de Membresia',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(17,6,NULL,7,39,'FAF','FAC-000002',14.40,0.00,1.87,0.00,0.00,0.00,16.27,'Emitida','2026-07-28 01:05:18',NULL,'Credito',5,'2026-08-02','[\"Efectivo\"]',NULL,NULL,NULL,'03344544545444','052920551','Pago de Membresia',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(18,6,NULL,7,38,'FAF','FAC-000003',6.00,0.00,0.78,0.00,0.00,0.00,6.78,'Pagada','2026-07-28 01:34:16',NULL,'Credito',3,'2026-07-31','[\"Efectivo\"]',NULL,NULL,NULL,'06070809090909','052920550','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(19,6,NULL,7,40,'FAF','FAC-000004',2.16,0.00,0.28,0.00,0.00,0.00,2.44,'Pagada','2026-07-28 04:38:28',NULL,'Credito',8,'2026-08-05','[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920557','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(20,6,NULL,7,38,'FAF','FAC-000005',2.00,0.00,0.26,0.00,0.00,0.00,2.26,'Pagada','2026-07-28 05:19:35',NULL,'Credito',1,'2026-07-29','[\"Efectivo\"]',NULL,NULL,NULL,'06070809090909','052920550','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(21,6,NULL,7,40,'FAF','FAC-000006',2.16,0.00,0.28,0.00,0.00,0.00,2.44,'Pagada','2026-07-28 06:06:29',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920557','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(22,2,NULL,1,41,'FAF','FAC-000001',5.50,0.00,0.72,0.00,0.00,0.00,6.22,'Emitida','2026-07-28 16:15:36',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,'052920955','052920555','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(23,7,NULL,11,43,'FAF','FAC-000001',2.75,0.00,0.36,0.00,0.00,0.00,3.11,'Pagada','2026-07-28 16:34:07',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920556','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(24,7,NULL,11,43,'FAF','FAC-000002',11.00,0.00,1.43,0.00,0.00,0.00,12.43,'Pagada','2026-07-29 02:56:59',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920556','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(28,7,NULL,11,43,'FAF','FAC-000003',16.50,0.00,2.15,0.00,0.00,0.00,18.65,'Pagada','2026-07-31 00:54:03',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920556','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(29,7,NULL,11,43,'FAF','FAC-000004',2.10,0.00,0.27,0.00,0.00,0.00,2.37,'Pagada','2026-07-31 05:55:29',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920556','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(30,6,NULL,7,21,'FAF','MEM-000001',160.00,0.00,20.80,0.00,0.00,0.00,180.80,'Pagada','2026-08-01 02:38:40',NULL,'Contado',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(31,8,NULL,12,46,'FAF','FAC-000001',7.20,0.00,0.94,0.00,0.00,0.00,8.14,'Emitida','2026-08-01 05:03:34',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920555','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL),(32,8,NULL,12,46,'FAF','FAC-000002',2.40,0.00,0.31,0.00,0.00,0.00,2.71,'Emitida','2026-08-01 06:31:35',NULL,'Contado',NULL,NULL,'[\"Efectivo\"]',NULL,NULL,NULL,NULL,'052920555','walter Padilla',0.00,0.00,NULL,NULL,'pendiente',NULL,NULL,NULL);
 /*!40000 ALTER TABLE `facturas` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `historial_cambios_plan`
+--
+
+DROP TABLE IF EXISTS `historial_cambios_plan`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `historial_cambios_plan` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `plan_anterior_id` int DEFAULT NULL,
+  `plan_nuevo_id` int DEFAULT NULL,
+  `fecha_cambio` datetime DEFAULT CURRENT_TIMESTAMP,
+  `usuario_id` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `plan_anterior_id` (`plan_anterior_id`),
+  KEY `plan_nuevo_id` (`plan_nuevo_id`),
+  KEY `usuario_id` (`usuario_id`),
+  CONSTRAINT `historial_cambios_plan_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`),
+  CONSTRAINT `historial_cambios_plan_ibfk_2` FOREIGN KEY (`plan_anterior_id`) REFERENCES `planes` (`id`),
+  CONSTRAINT `historial_cambios_plan_ibfk_3` FOREIGN KEY (`plan_nuevo_id`) REFERENCES `planes` (`id`),
+  CONSTRAINT `historial_cambios_plan_ibfk_4` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `historial_cambios_plan`
+--
+
+LOCK TABLES `historial_cambios_plan` WRITE;
+/*!40000 ALTER TABLE `historial_cambios_plan` DISABLE KEYS */;
+/*!40000 ALTER TABLE `historial_cambios_plan` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `historial_vacunas`
+--
+
+DROP TABLE IF EXISTS `historial_vacunas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `historial_vacunas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `paciente_id` int NOT NULL,
+  `vacuna_id` int NOT NULL,
+  `fecha_aplicacion` date NOT NULL,
+  `fecha_proxima` date DEFAULT NULL,
+  `lote` varchar(50) DEFAULT NULL,
+  `observaciones` text,
+  `medico_id` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `paciente_id` (`paciente_id`),
+  KEY `vacuna_id` (`vacuna_id`),
+  KEY `medico_id` (`medico_id`),
+  CONSTRAINT `historial_vacunas_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `historial_vacunas_ibfk_2` FOREIGN KEY (`paciente_id`) REFERENCES `pacientes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `historial_vacunas_ibfk_3` FOREIGN KEY (`vacuna_id`) REFERENCES `vacunas` (`id`),
+  CONSTRAINT `historial_vacunas_ibfk_4` FOREIGN KEY (`medico_id`) REFERENCES `medicos` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `historial_vacunas`
+--
+
+LOCK TABLES `historial_vacunas` WRITE;
+/*!40000 ALTER TABLE `historial_vacunas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `historial_vacunas` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -655,7 +912,7 @@ CREATE TABLE `marcas` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_marca_org` (`organizacion_id`,`nombre`),
   CONSTRAINT `marcas_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -664,8 +921,40 @@ CREATE TABLE `marcas` (
 
 LOCK TABLES `marcas` WRITE;
 /*!40000 ALTER TABLE `marcas` DISABLE KEYS */;
-INSERT INTO `marcas` VALUES (1,6,'Coca-Cola',1,'2026-07-21 21:39:36'),(2,6,'Salva-Cola',1,'2026-07-21 21:42:54'),(3,6,'Boca Deli',1,'2026-07-21 21:47:37'),(4,6,'Chiky',1,'2026-07-21 22:12:34'),(5,6,'Nescafe',1,'2026-07-22 00:54:48'),(6,6,'Lido',1,'2026-07-27 02:18:36'),(7,2,'Granjero',1,'2026-07-28 15:43:22'),(8,7,'Granjero',1,'2026-07-28 16:33:54');
+INSERT INTO `marcas` VALUES (1,6,'Coca-Cola',1,'2026-07-21 21:39:36'),(2,6,'Salva-Cola',1,'2026-07-21 21:42:54'),(3,6,'Boca Deli',1,'2026-07-21 21:47:37'),(4,6,'Chiky',1,'2026-07-21 22:12:34'),(5,6,'Nescafe',1,'2026-07-22 00:54:48'),(6,6,'Lido',1,'2026-07-27 02:18:36'),(7,2,'Granjero',1,'2026-07-28 15:43:22'),(8,7,'Granjero',1,'2026-07-28 16:33:54'),(9,7,'Juliana',1,'2026-07-30 02:10:56'),(10,8,'Granjero',1,'2026-08-01 05:02:43');
 /*!40000 ALTER TABLE `marcas` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `medicos`
+--
+
+DROP TABLE IF EXISTS `medicos`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `medicos` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `especialidad` varchar(100) DEFAULT NULL,
+  `numero_licencia` varchar(50) DEFAULT NULL,
+  `activo` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `usuario_id` (`usuario_id`),
+  CONSTRAINT `medicos_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `medicos_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `medicos`
+--
+
+LOCK TABLES `medicos` WRITE;
+/*!40000 ALTER TABLE `medicos` DISABLE KEYS */;
+/*!40000 ALTER TABLE `medicos` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -702,7 +991,7 @@ CREATE TABLE `movimientos_inventario` (
   CONSTRAINT `movimientos_inventario_ibfk_1` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`) ON DELETE CASCADE,
   CONSTRAINT `movimientos_inventario_ibfk_2` FOREIGN KEY (`bodega_id`) REFERENCES `bodegas` (`id`) ON DELETE SET NULL,
   CONSTRAINT `movimientos_inventario_ibfk_3` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -711,6 +1000,7 @@ CREATE TABLE `movimientos_inventario` (
 
 LOCK TABLES `movimientos_inventario` WRITE;
 /*!40000 ALTER TABLE `movimientos_inventario` DISABLE KEYS */;
+INSERT INTO `movimientos_inventario` VALUES (3,7,23,NULL,'Entrada',10.00,1.00,1.00,'Compra',10,2.60,'Compra #TDS_09489393',11,'2026-07-31 00:45:42'),(5,7,23,NULL,'Salida',6.00,11.00,5.00,'Factura',28,2.75,'Factura #FAC-000003',11,'2026-07-31 00:54:03'),(6,7,24,NULL,'Salida',6.00,6.00,0.00,'Factura',29,0.35,'Factura #FAC-000004',11,'2026-07-31 05:55:29'),(7,8,25,NULL,'Salida',3.00,6.00,3.00,'Factura',31,2.40,'Factura #FAC-000001',12,'2026-08-01 05:03:34'),(8,8,25,NULL,'Salida',1.00,3.00,2.00,'Factura',32,2.40,'Factura #FAC-000002',12,'2026-08-01 06:31:35');
 /*!40000 ALTER TABLE `movimientos_inventario` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -738,6 +1028,40 @@ LOCK TABLES `municipios` WRITE;
 /*!40000 ALTER TABLE `municipios` DISABLE KEYS */;
 INSERT INTO `municipios` VALUES ('01','01','Ahuachapán'),('02','01','Apaneca'),('03','01','Atiquizaya'),('04','01','Concepción de Ataco'),('05','01','El Refugio'),('06','01','Guaymango'),('07','01','Jujutla'),('08','01','San Francisco Menéndez'),('09','01','San Lorenzo'),('10','01','San Pedro Puxtla'),('11','01','Tacuba'),('12','01','Turín'),('01','02','Santa Ana'),('02','02','Candelaria de la Frontera'),('03','02','Chalchuapa'),('04','02','Coatepeque'),('05','02','El Congo'),('06','02','El Porvenir'),('07','02','Masahuat'),('08','02','Metapán'),('09','02','San Antonio Pajonal'),('10','02','San Sebastián Salitrillo'),('11','02','Santa Rosa Guachipilín'),('12','02','Santiago de la Frontera'),('13','02','Texistepeque'),('01','03','Sonsonate'),('02','03','Acajutla'),('03','03','Armenia'),('04','03','Caluco'),('05','03','Cuisnahuat'),('06','03','Izalco'),('07','03','Juayúa'),('08','03','Nahuizalco'),('09','03','Nahulingo'),('10','03','Salcoatitán'),('11','03','San Antonio del Monte'),('12','03','San Julián'),('13','03','Santa Catarina Masahuat'),('14','03','Santa Isabel Ishuatán'),('15','03','Santo Domingo de Guzmán'),('16','03','Sonsonate'),('01','04','Chalatenango'),('02','04','Agua Caliente'),('03','04','Arcatao'),('04','04','Azacualpa'),('05','04','Cinfuegos'),('06','04','Comalapa'),('07','04','Concepción Quezaltepeque'),('08','04','El Carrizal'),('09','04','El Paraíso'),('10','04','La Laguna'),('11','04','La Palma'),('12','04','La Reina'),('13','04','Las Vueltas'),('14','04','Nueva Concepción'),('15','04','Nueva Trinidad'),('16','04','Nombre de Jesús'),('17','04','Ojos de Agua'),('18','04','Potonico'),('19','04','San Antonio de la Cruz'),('20','04','San Antonio Los Ranchos'),('21','04','San Fernando'),('22','04','San Francisco Lempa'),('23','04','San Francisco Morazán'),('24','04','San Ignacio'),('25','04','San Isidro Labrador'),('26','04','Las Flores'),('27','04','San Luis del Carmen'),('28','04','San Miguel de Mercedes'),('29','04','San Rafael'),('30','04','Santa Rita'),('31','04','Tejutla'),('32','04','Reubicación'),('33','04','San José Cancasque'),('01','05','Santa Tecla'),('02','05','Antiguo Cuscatlán'),('03','05','Chiltiupán'),('04','05','Ciudad Arce'),('05','05','Colón'),('06','05','Comasagua'),('07','05','Huizúcar'),('08','05','Jayaque'),('09','05','Jicalapa'),('10','05','La Libertad'),('11','05','Nuevo Cuscatlán'),('12','05','San Juan Opico'),('13','05','Quezaltepeque'),('14','05','Sacacoyo'),('15','05','San José Villanueva'),('16','05','San Matías'),('17','05','San Pablo Tacachico'),('18','05','Talnique'),('19','05','Tamanique'),('20','05','Teotepeque'),('21','05','Tepecoyo'),('22','05','Zaragoza'),('01','06','San Salvador'),('02','06','Aguilares'),('03','06','Apopa'),('04','06','Ayutuxtepeque'),('05','06','Cuscatancingo'),('06','06','Ciudad Delgado'),('07','06','El Paisnal'),('08','06','Guazapa'),('09','06','Ilopango'),('10','06','Mejicanos'),('11','06','Nejapa'),('12','06','Panchimalco'),('13','06','Rosario de Mora'),('14','06','San Marcos'),('15','06','Santiago Texacuangos'),('16','06','Santo Domingo'),('17','06','Soyapango'),('18','06','Tonacatepeque'),('19','06','San Martín'),('01','07','Cojutepeque'),('02','07','Candelaria'),('03','07','El Carmen'),('04','07','El Rosario'),('05','07','Monte San Juan'),('06','07','Oratorio de Concepción'),('07','07','San Bartolomé Perulapía'),('08','07','San Cristóbal'),('09','07','San José Guayabal'),('10','07','San Pedro Perulapán'),('11','07','San Rafael Cedros'),('12','07','San Ramón'),('13','07','Santa Cruz Analquito'),('14','07','Santa Cruz Michapa'),('15','07','Suchitoto'),('16','07','Tenancingo'),('01','08','Zacatecoluca'),('02','08','Cuyultitán'),('03','08','El Rosario'),('04','08','Jerusalén'),('05','08','Mercedes La Ceiba'),('06','08','Olocuilta'),('07','08','Paraíso de Osorio'),('08','08','San Antonio Masahuat'),('09','08','San Emigdio'),('10','08','San Francisco Chinameca'),('11','08','San Pedro Nonualco'),('12','08','San Juan Nonualco'),('13','08','San Juan Talpa'),('14','08','San Juan Tepezontes'),('15','08','San Luis La Herradura'),('16','08','San Luis Talpa'),('17','08','San Miguel Tepezontes'),('18','08','San Pedro Masahuat'),('19','08','San Rafael Obrajuelo'),('20','08','Santa María Ostuma'),('21','08','Santiago Nonualco'),('22','08','Tapalhuaca'),('01','09','Sensuntepeque'),('02','09','Cinquera'),('03','09','Dolores'),('04','09','Guacotecti'),('05','09','Ilobasco'),('06','09','Jutiapa'),('07','09','San Isidro'),('08','09','Tejutepeque'),('09','09','Victoria'),('01','10','San Vicente'),('02','10','Apastepeque'),('03','10','Guadalupe'),('04','10','San Cayetano Istepeque'),('05','10','Santa Clara'),('06','10','Santo Domingo'),('07','10','San Esteban Catarina'),('08','10','San Ildefonso'),('09','10','San Lorenzo'),('10','10','San Sebastián'),('11','10','Tepetitán'),('12','10','Tecoluca'),('13','10','Verapaz'),('01','11','Usulután'),('02','11','Alegría'),('03','11','Berlín'),('04','11','California'),('05','11','Concepción Batres'),('06','11','El Triunfo'),('07','11','Ereguayquín'),('08','11','Estanzuelas'),('09','11','Jiquilisco'),('10','11','Jucuapa'),('11','11','Jucuarán'),('12','11','Mercedes Umaña'),('13','11','Nueva Granada'),('14','11','Ozatlán'),('15','11','Puerto El Triunfo'),('16','11','San Agustín'),('17','11','San Buenaventura'),('18','11','San Dionisio'),('19','11','Santa Elena'),('20','11','San Francisco Javier'),('21','11','Santa María'),('22','11','Santiago de María'),('23','11','Tecapán'),('01','12','San Miguel'),('02','12','Carolina'),('03','12','Ciudad Barrios'),('04','12','Comacarán'),('05','12','Chinameca'),('06','12','Chirilagua'),('07','12','El Tránsito'),('08','12','Lolotique'),('09','12','Moncagua'),('10','12','Nueva Guadalupe'),('11','12','Nuevo Edén de San Juan'),('12','12','Quelepa'),('13','12','San Antonio'),('14','12','San Gerardo'),('15','12','San Jorge'),('16','12','San Luis de la Reina'),('17','12','San Rafael Oriente'),('18','12','Sesori'),('19','12','Uluazapa'),('20','12','Villatoro'),('01','13','San Francisco Gotera'),('02','13','Arambala'),('03','13','Cacaopera'),('04','13','Corinto'),('05','13','Chilanga'),('06','13','Delicias de Concepción'),('07','13','El Divisadero'),('08','13','El Rosario'),('09','13','Gualococti'),('10','13','Guatajiagua'),('11','13','Joateca'),('12','13','Jocoaitique'),('13','13','Jocoro'),('14','13','Lolotiquillo'),('15','13','Meanguera'),('16','13','Osicala'),('17','13','Perquín'),('18','13','San Carlos'),('19','13','San Fernando'),('20','13','San Isidro'),('21','13','San Simón'),('22','13','Sensembra'),('23','13','Sociedad'),('24','13','Torola'),('25','13','Yamabal'),('26','13','Yoloaiquín'),('01','14','La Unión'),('02','14','Anamorós'),('03','14','Bolívar'),('04','14','Concepción de Oriente'),('05','14','Conchagua'),('06','14','El Carmen'),('07','14','El Sauce'),('08','14','Intipucá'),('09','14','Lislique'),('10','14','Meanguera del Golfo'),('11','14','Nueva Esparta'),('12','14','Pasaquina'),('13','14','Polorós'),('14','14','San Alejo'),('15','14','San José'),('16','14','Santa Rosa de Lima'),('17','14','Yayantique'),('18','14','Yucuaiquín');
 /*!40000 ALTER TABLE `municipios` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `odontogramas`
+--
+
+DROP TABLE IF EXISTS `odontogramas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `odontogramas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `paciente_id` int NOT NULL,
+  `fecha_registro` datetime DEFAULT CURRENT_TIMESTAMP,
+  `dientes` json NOT NULL,
+  `observaciones` text,
+  `medico_id` int NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `paciente_id` (`paciente_id`),
+  KEY `medico_id` (`medico_id`),
+  CONSTRAINT `odontogramas_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `odontogramas_ibfk_2` FOREIGN KEY (`paciente_id`) REFERENCES `pacientes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `odontogramas_ibfk_3` FOREIGN KEY (`medico_id`) REFERENCES `medicos` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `odontogramas`
+--
+
+LOCK TABLES `odontogramas` WRITE;
+/*!40000 ALTER TABLE `odontogramas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `odontogramas` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -772,14 +1096,21 @@ CREATE TABLE `organizaciones` (
   `certificado_p12_base64` longtext,
   `password_certificado` varchar(255) DEFAULT NULL,
   `password_api_mh` varchar(255) DEFAULT NULL,
+  `plan_id` int DEFAULT '1',
+  `fecha_inicio_plan` date DEFAULT (curdate()),
+  `whatsapp_activado` tinyint(1) DEFAULT '1',
+  `limite_facturas` int DEFAULT '40',
+  `limite_whatsapp` int DEFAULT '200',
   PRIMARY KEY (`id`),
   UNIQUE KEY `nit` (`nit`),
   UNIQUE KEY `nrc` (`nrc`),
   KEY `id_departamento` (`id_departamento`,`id_municipio`),
   KEY `codigo_giro` (`codigo_giro`),
+  KEY `plan_id` (`plan_id`),
   CONSTRAINT `organizaciones_ibfk_1` FOREIGN KEY (`id_departamento`, `id_municipio`) REFERENCES `municipios` (`id_departamento`, `id_municipio`) ON DELETE SET NULL,
-  CONSTRAINT `organizaciones_ibfk_2` FOREIGN KEY (`codigo_giro`) REFERENCES `actividades_economicas` (`codigo_giro`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `organizaciones_ibfk_2` FOREIGN KEY (`codigo_giro`) REFERENCES `actividades_economicas` (`codigo_giro`) ON DELETE SET NULL,
+  CONSTRAINT `organizaciones_ibfk_3` FOREIGN KEY (`plan_id`) REFERENCES `planes` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -788,8 +1119,49 @@ CREATE TABLE `organizaciones` (
 
 LOCK TABLES `organizaciones` WRITE;
 /*!40000 ALTER TABLE `organizaciones` DISABLE KEYS */;
-INSERT INTO `organizaciones` VALUES (1,'SuperAdmin','0000-000000-000-0',NULL,'Exento','Activo','2026-07-17 15:56:43',NULL,NULL,NULL,NULL,NULL,NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL),(2,'Empresa de prueba','0804-0123-101-4','65739s','Mediano','Activo','2026-07-17 18:01:26','','Prueba SA de CV','Colonia Divina Providencia, BK Y Pasaje 7','71409012','+50371409012','','',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL),(4,'gffg','0804-0123-101-9','65739f','Grande','Activo','2026-07-17 18:22:28','','Prueba SA de CVff','Colonia Divina Providencia, BK Y Pasaje 7','60490303','+50360490303',NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL),(5,'Empresa de prueba01','0804-0123-101-7','657397y','Pequeño','Activo','2026-07-18 05:15:28','','Prueba SA de CVffe','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','71409012','+50371409012',NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL),(6,'MK sor','0804-0123-101-6','95899565','Pequeño','Activo','2026-07-19 03:15:42','','dffgfghfd','Colonia Divina Providencia, BK Y Pasaje 7','+50371409012','+50371409012',NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL),(7,'Prueba DEV','0909-090990-090-9','0000077','Mediano','Activo','2026-07-28 16:30:21','','Salamanca Taller','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','+50372566701','+50372566701',NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO `organizaciones` VALUES (1,'SuperAdmin','0000-000000-000-0',NULL,'Exento','Activo','2026-07-17 15:56:43',NULL,NULL,NULL,NULL,NULL,NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-30',1,40,200),(2,'Empresa de prueba','0804-0123-101-4','65739s','Mediano','Activo','2026-07-17 18:01:26','','Prueba SA de CV','Colonia Divina Providencia, BK Y Pasaje 7','71409012','+50371409012','','',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-30',1,40,200),(4,'gffg','0804-0123-101-9','65739f','Grande','Activo','2026-07-17 18:22:28','','Prueba SA de CVff','Colonia Divina Providencia, BK Y Pasaje 7','60490303','+50360490303',NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-30',1,40,200),(5,'Empresa de prueba01','0804-0123-101-7','657397y','Pequeño','Activo','2026-07-18 05:15:28','','Prueba SA de CVffe','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','71409012','+50371409012',NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-30',1,40,200),(6,'MK sor','0804-0123-101-6','95899565','Pequeño','Activo','2026-07-19 03:15:42','','dffgfghfd','Colonia Divina Providencia, BK Y Pasaje 7','+50371409012','+50371409012',NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-30',1,40,200),(7,'Prueba DEV','0909-090990-090-9','0000077','Mediano','Activo','2026-07-28 16:30:21','','Salamanca Taller','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','+50372566701','+50372566701',NULL,'',NULL,NULL,'Empresa Comercial',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,'2026-07-30',1,40,200),(8,'Imagen','0000-909090-898-9','6573979','Pequeño','Activo','2026-08-01 03:08:49','/uploads/logos/org_1_1785622532472.jpg','Imagen','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','+50371409012','+50371409012',NULL,'00',NULL,NULL,'Empresa Comercial','04','04','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','62010',NULL,NULL,NULL,1,'2026-07-31',0,20,0);
 /*!40000 ALTER TABLE `organizaciones` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `pacientes`
+--
+
+DROP TABLE IF EXISTS `pacientes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pacientes` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `cliente_id` int NOT NULL,
+  `tipo_paciente` enum('Humano','Mascota') NOT NULL,
+  `nombre` varchar(100) NOT NULL,
+  `apellidos` varchar(100) DEFAULT NULL,
+  `fecha_nacimiento` date DEFAULT NULL,
+  `genero` enum('M','F','Otro') DEFAULT NULL,
+  `especie` varchar(50) DEFAULT NULL,
+  `raza` varchar(50) DEFAULT NULL,
+  `color` varchar(50) DEFAULT NULL,
+  `senas_particulares` text,
+  `chip` varchar(50) DEFAULT NULL,
+  `peso` decimal(5,2) DEFAULT NULL,
+  `activo` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `cliente_id` (`cliente_id`),
+  CONSTRAINT `pacientes_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `pacientes_ibfk_2` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `pacientes`
+--
+
+LOCK TABLES `pacientes` WRITE;
+/*!40000 ALTER TABLE `pacientes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `pacientes` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -856,6 +1228,36 @@ LOCK TABLES `periodos_pago` WRITE;
 /*!40000 ALTER TABLE `periodos_pago` DISABLE KEYS */;
 INSERT INTO `periodos_pago` VALUES (2,6,'Mensual','2026-07-01','2026-07-31',7,2026),(3,6,'Mensual','2026-08-01','2026-08-31',8,2026),(4,6,'Quincenal','2026-09-01','2026-09-30',9,2026),(5,6,'Mensual','2026-10-01','2026-10-31',10,2026),(6,6,'Quincenal','2026-11-01','2026-11-30',11,2026);
 /*!40000 ALTER TABLE `periodos_pago` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `planes`
+--
+
+DROP TABLE IF EXISTS `planes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `planes` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(50) NOT NULL,
+  `descripcion` text,
+  `limite_facturas_mensuales` int NOT NULL DEFAULT '40',
+  `limite_whatsapp_mensual` int NOT NULL DEFAULT '200',
+  `precio` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `activo` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `planes`
+--
+
+LOCK TABLES `planes` WRITE;
+/*!40000 ALTER TABLE `planes` DISABLE KEYS */;
+INSERT INTO `planes` VALUES (1,'Mínima','Plan básico',40,200,10.00,1,'2026-07-31 04:46:13'),(2,'Básica','Para pequeños negocios',80,300,20.00,1,'2026-07-31 04:46:13'),(3,'Moderna','Crecimiento',150,500,35.00,1,'2026-07-31 04:46:13'),(4,'Premium','Ilimitado en facturas',99999,1000,60.00,1,'2026-07-31 04:46:13');
+/*!40000 ALTER TABLE `planes` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -1039,7 +1441,7 @@ CREATE TABLE `productos` (
   KEY `idx_productos_marca` (`marca_id`),
   KEY `idx_productos_activo` (`activo`),
   CONSTRAINT `productos_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1048,7 +1450,7 @@ CREATE TABLE `productos` (
 
 LOCK TABLES `productos` WRITE;
 /*!40000 ALTER TABLE `productos` DISABLE KEYS */;
-INSERT INTO `productos` VALUES (2,1,'Pago de Membresia','Producto de membresia',10.00,5.00,0.00,0.00,0.00,0.00,NULL,'Servicio','Unidad',NULL,NULL,'2026-07-19 22:04:37',NULL,NULL,NULL,1,NULL,NULL,0),(3,6,'Kit/Combo (2026-07-21)','',0.00,0.00,0.00,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'','2026-07-21 20:49:39',NULL,NULL,NULL,1,NULL,NULL,1),(4,6,'Pala de Madera','Pala para usos varios',15.00,0.00,13.02,3.00,9.00,0.00,NULL,'Producto','Unidad',NULL,'SKAU','2026-07-21 21:34:31',NULL,NULL,NULL,1,1,NULL,0),(7,6,'Gaseosa 1.5Lit','',2.25,0.00,1.90,2.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'SKAU_02','2026-07-21 21:40:10',NULL,NULL,NULL,1,2,1,0),(8,6,'Coca Cola 2.5 Litros','',2.88,0.00,2.49,21.00,9.00,0.00,NULL,'Producto','Unidad',NULL,'SKIQA','2026-07-21 21:41:16',NULL,NULL,NULL,1,2,1,0),(9,6,'Colachanpan 500ml','',0.60,0.00,0.38,34.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'Kdjdjs','2026-07-21 21:42:56',NULL,NULL,NULL,1,2,2,0),(10,6,'Quesito 20 gr','',0.20,0.00,0.15,20.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'CATkd02','2026-07-21 21:47:38',NULL,NULL,NULL,1,3,3,0),(12,6,'Consumo probe','combo de sodas',0.00,0.00,0.00,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'KITCONE9909','2026-07-21 22:51:08',NULL,NULL,NULL,1,NULL,NULL,1),(13,6,'Cereal Vainilla 400gr','',4.60,0.00,3.40,6.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'CERCERO5007','2026-07-21 23:11:48',NULL,NULL,NULL,1,5,NULL,0),(14,1,'Membresia de veterinaira','',80.00,0.00,0.00,0.00,0.00,0.00,NULL,'Servicio','Unidad',NULL,'SUSMEML5445','2026-07-21 23:42:12',NULL,NULL,NULL,1,6,NULL,0),(15,6,'Desayuno','',8.70,0.00,8.70,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'SNADESL2648','2026-07-22 00:29:26',NULL,NULL,NULL,1,3,NULL,1),(16,6,'Pan Frances','',0.35,0.00,0.23,47.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'COMPANY5993','2026-07-22 00:47:12',NULL,NULL,NULL,1,7,NULL,0),(17,6,'Desayuno Estudiante','',2.95,0.00,2.95,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'KITDESA1169','2026-07-22 00:49:28',NULL,NULL,NULL,1,7,NULL,1),(18,6,'Semita dulce','',0.40,0.00,0.23,35.00,4.00,0.00,NULL,'Producto','Unidad',NULL,'COMSEMS7069','2026-07-22 00:53:30',NULL,NULL,NULL,1,7,NULL,0),(19,6,'Café Instantaneo','',3.60,0.00,3.49,2.00,4.00,0.00,NULL,'Producto','Unidad',NULL,'NESCAFN5103','2026-07-22 00:54:50',NULL,NULL,NULL,1,8,5,0),(20,6,'Pan de caja Lido','Pan de Caja',1.90,0.00,1.78,12.00,7.00,0.00,NULL,'Producto','Unidad',NULL,'COMPANP8680','2026-07-27 02:18:38',NULL,NULL,NULL,1,7,6,0),(21,6,'combo01','Combo de pan y gaseosa',2.16,0.00,2.16,3.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'KITCOMB8809','2026-07-27 02:20:50',NULL,NULL,NULL,1,7,NULL,1),(22,2,'carton de huevo mediano','',5.50,0.00,4.20,6.00,5.00,0.00,NULL,'Producto','Unidad',NULL,'COMCARU3439','2026-07-28 15:43:23',NULL,NULL,NULL,1,9,7,0),(23,7,'Huevo carton 15 unidades','',2.75,0.00,2.00,1.00,5.00,0.00,NULL,'Producto','Unidad',NULL,'COMHUEP5916','2026-07-28 16:33:54',NULL,NULL,NULL,1,10,8,0);
+INSERT INTO `productos` VALUES (2,1,'Pago de Membresia','Producto de membresia',10.00,5.00,0.00,0.00,0.00,0.00,NULL,'Servicio','Unidad',NULL,NULL,'2026-07-19 22:04:37',NULL,NULL,NULL,1,NULL,NULL,0),(3,6,'Kit/Combo (2026-07-21)','',0.00,0.00,0.00,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'','2026-07-21 20:49:39',NULL,NULL,NULL,1,NULL,NULL,1),(4,6,'Pala de Madera','Pala para usos varios',15.00,0.00,13.02,3.00,9.00,0.00,NULL,'Producto','Unidad',NULL,'SKAU','2026-07-21 21:34:31',NULL,NULL,NULL,1,1,NULL,0),(7,6,'Gaseosa 1.5Lit','',2.25,0.00,1.90,2.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'SKAU_02','2026-07-21 21:40:10',NULL,NULL,NULL,1,2,1,0),(8,6,'Coca Cola 2.5 Litros','',2.88,0.00,2.49,21.00,9.00,0.00,NULL,'Producto','Unidad',NULL,'SKIQA','2026-07-21 21:41:16',NULL,NULL,NULL,1,2,1,0),(9,6,'Colachanpan 500ml','',0.60,0.00,0.38,34.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'Kdjdjs','2026-07-21 21:42:56',NULL,NULL,NULL,1,2,2,0),(10,6,'Quesito 20 gr','',0.20,0.00,0.15,20.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'CATkd02','2026-07-21 21:47:38',NULL,NULL,NULL,1,3,3,0),(12,6,'Consumo probe','combo de sodas',0.00,0.00,0.00,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'KITCONE9909','2026-07-21 22:51:08',NULL,NULL,NULL,1,NULL,NULL,1),(13,6,'Cereal Vainilla 400gr','',4.60,0.00,3.40,6.00,10.00,0.00,NULL,'Producto','Unidad',NULL,'CERCERO5007','2026-07-21 23:11:48',NULL,NULL,NULL,1,5,NULL,0),(14,1,'Membresia de veterinaira','',80.00,0.00,0.00,0.00,0.00,0.00,NULL,'Servicio','Unidad',NULL,'SUSMEML5445','2026-07-21 23:42:12',NULL,NULL,NULL,1,6,NULL,0),(15,6,'Desayuno','',8.70,0.00,8.70,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'SNADESL2648','2026-07-22 00:29:26',NULL,NULL,NULL,1,3,NULL,1),(16,6,'Pan Frances','',0.35,0.00,0.23,47.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'COMPANY5993','2026-07-22 00:47:12',NULL,NULL,NULL,1,7,NULL,0),(17,6,'Desayuno Estudiante','',2.95,0.00,2.95,0.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'KITDESA1169','2026-07-22 00:49:28',NULL,NULL,NULL,1,7,NULL,1),(18,6,'Semita dulce','',0.40,0.00,0.23,35.00,4.00,0.00,NULL,'Producto','Unidad',NULL,'COMSEMS7069','2026-07-22 00:53:30',NULL,NULL,NULL,1,7,NULL,0),(19,6,'Café Instantaneo','',3.60,0.00,3.49,2.00,4.00,0.00,NULL,'Producto','Unidad',NULL,'NESCAFN5103','2026-07-22 00:54:50',NULL,NULL,NULL,1,8,5,0),(20,6,'Pan de caja Lido','Pan de Caja',1.90,0.00,1.78,12.00,7.00,0.00,NULL,'Producto','Unidad',NULL,'COMPANP8680','2026-07-27 02:18:38',NULL,NULL,NULL,1,7,6,0),(21,6,'combo01','Combo de pan y gaseosa',2.16,0.00,2.16,3.00,0.00,0.00,NULL,'Producto','Unidad',NULL,'KITCOMB8809','2026-07-27 02:20:50',NULL,NULL,NULL,1,7,NULL,1),(22,2,'carton de huevo mediano','',5.50,0.00,4.20,6.00,5.00,0.00,NULL,'Producto','Unidad',NULL,'COMCARU3439','2026-07-28 15:43:23',NULL,NULL,NULL,1,9,7,0),(23,7,'Huevo carton 15 unidades','',2.75,0.00,2.02,5.00,5.00,0.00,NULL,'Producto','Unidad',NULL,'COMHUEP5916','2026-07-28 16:33:54',NULL,NULL,NULL,1,10,8,0),(24,7,'Pan Frances','Pan frances hecho en casa',0.35,0.00,0.21,0.00,3.00,0.00,NULL,'Producto','Unidad',NULL,'COMPANR1169','2026-07-30 02:10:56',NULL,NULL,NULL,1,10,9,0),(25,8,'carton de huevo mediano','',2.40,0.00,2.00,2.00,5.00,0.00,NULL,'Producto','Unidad',NULL,'COMCARG1521','2026-08-01 05:02:45',NULL,NULL,NULL,1,11,10,0);
 /*!40000 ALTER TABLE `productos` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1085,7 +1487,7 @@ CREATE TABLE `proveedores` (
   CONSTRAINT `proveedores_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
   CONSTRAINT `proveedores_ibfk_2` FOREIGN KEY (`id_departamento`, `id_municipio`) REFERENCES `municipios` (`id_departamento`, `id_municipio`),
   CONSTRAINT `proveedores_ibfk_3` FOREIGN KEY (`codigo_giro`) REFERENCES `actividades_economicas` (`codigo_giro`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1094,7 +1496,7 @@ CREATE TABLE `proveedores` (
 
 LOCK TABLES `proveedores` WRITE;
 /*!40000 ALTER TABLE `proveedores` DISABLE KEYS */;
-INSERT INTO `proveedores` VALUES (1,6,'Salamanca','Facturacion SA','DUI','04958048404','000005','02','01','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','71409012','walter04padilla@gmail.com','47110','Pequeño',0,'2026-07-25 05:31:21','2026-07-25 18:39:35'),(2,6,'Juanitos Perez','Juan Valdez CA de CV','NIT','05390394849309','25949908','12','12','fjdso casa 5 valle 4','71409018','wala@gmail.com','56100','Mediano',1,'2026-07-25 17:41:38','2026-07-25 18:02:14'),(3,6,'Tamalaes ','Harinas sv','DUI','015902938',NULL,'06','13','Colonia Divina Providenci','71409016','walter04@gmail.com','86900','Mediano',0,'2026-07-25 18:49:39','2026-07-25 19:02:25');
+INSERT INTO `proveedores` VALUES (1,6,'Salamanca','Facturacion SA','DUI','04958048404','000005','02','01','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','71409012','walter04padilla@gmail.com','47110','Pequeño',0,'2026-07-25 05:31:21','2026-07-25 18:39:35'),(2,6,'Juanitos Perez','Juan Valdez CA de CV','NIT','05390394849309','25949908','12','12','fjdso casa 5 valle 4','71409018','wala@gmail.com','56100','Mediano',1,'2026-07-25 17:41:38','2026-07-25 18:02:14'),(3,6,'Tamalaes ','Harinas sv','DUI','015902938',NULL,'06','13','Colonia Divina Providenci','71409016','walter04@gmail.com','86900','Mediano',0,'2026-07-25 18:49:39','2026-07-25 19:02:25'),(4,7,'Juanitos Perez','Prueba SA de CVff','DUI','049580484',NULL,'12','11','Colonia Divina Providencia, BK Y Pasaje 7, Numero 9','22222222','wala@gmial.com','56100','Mediano',1,'2026-07-30 02:12:20','2026-07-30 02:12:20');
 /*!40000 ALTER TABLE `proveedores` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1145,7 +1547,7 @@ CREATE TABLE `saas_ingresos_membresias` (
   PRIMARY KEY (`id`),
   KEY `organizacion_id` (`organizacion_id`),
   CONSTRAINT `saas_ingresos_membresias_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1154,8 +1556,47 @@ CREATE TABLE `saas_ingresos_membresias` (
 
 LOCK TABLES `saas_ingresos_membresias` WRITE;
 /*!40000 ALTER TABLE `saas_ingresos_membresias` DISABLE KEYS */;
-INSERT INTO `saas_ingresos_membresias` VALUES (1,4,22.60,7,2026,'2026-07-21 13:48:10',NULL),(2,4,11.30,7,2026,'2026-07-21 13:48:12',NULL),(3,6,2.26,7,2026,'2026-07-28 22:16:58',NULL);
+INSERT INTO `saas_ingresos_membresias` VALUES (1,4,22.60,7,2026,'2026-07-21 13:48:10',NULL),(2,4,11.30,7,2026,'2026-07-21 13:48:12',NULL),(3,6,2.26,7,2026,'2026-07-28 22:16:58',NULL),(4,6,180.80,7,2026,'2026-08-01 02:39:05',NULL);
 /*!40000 ALTER TABLE `saas_ingresos_membresias` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `solicitudes_examen`
+--
+
+DROP TABLE IF EXISTS `solicitudes_examen`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `solicitudes_examen` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `consulta_id` int NOT NULL,
+  `examen_id` int NOT NULL,
+  `paciente_id` int NOT NULL,
+  `fecha_solicitud` datetime DEFAULT CURRENT_TIMESTAMP,
+  `fecha_resultado` datetime DEFAULT NULL,
+  `resultado_texto` text,
+  `resultado_archivo_url` varchar(255) DEFAULT NULL,
+  `estado` enum('Pendiente','Completado','Cancelado') DEFAULT 'Pendiente',
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  KEY `consulta_id` (`consulta_id`),
+  KEY `examen_id` (`examen_id`),
+  KEY `paciente_id` (`paciente_id`),
+  CONSTRAINT `solicitudes_examen_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `solicitudes_examen_ibfk_2` FOREIGN KEY (`consulta_id`) REFERENCES `consultas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `solicitudes_examen_ibfk_3` FOREIGN KEY (`examen_id`) REFERENCES `examenes` (`id`),
+  CONSTRAINT `solicitudes_examen_ibfk_4` FOREIGN KEY (`paciente_id`) REFERENCES `pacientes` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `solicitudes_examen`
+--
+
+LOCK TABLES `solicitudes_examen` WRITE;
+/*!40000 ALTER TABLE `solicitudes_examen` DISABLE KEYS */;
+/*!40000 ALTER TABLE `solicitudes_examen` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -1207,7 +1648,7 @@ CREATE TABLE `usuarios` (
   UNIQUE KEY `correo` (`correo`),
   KEY `idx_usuarios_org` (`organizacion_id`),
   CONSTRAINT `usuarios_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1216,7 +1657,7 @@ CREATE TABLE `usuarios` (
 
 LOCK TABLES `usuarios` WRITE;
 /*!40000 ALTER TABLE `usuarios` DISABLE KEYS */;
-INSERT INTO `usuarios` VALUES (1,1,'SuperAdmin','superadmin@localhost.com','$2b$10$wgjSORjigZ8/CINJQoiCLu3lR4M5o9VCFSwWx0eVpVgCdEiG/5N/C','SUPER_ADMIN','Activo',0,'2026-07-17 19:19:30'),(2,4,'prueba01','prueba01@gmail.com','$2b$10$D.xMKwZVn8NjMaQq1PtvQ.hYMgKQbWhZP8d7J2l7SODTOB/XfPKGq','Admin','Inactivo',0,'2026-07-17 19:19:30'),(3,NULL,'Walter Padilla','waly04padilla@gmail.com','$2b$10$yrGmKjB.FFwT2QMFSCVikefSzOaYA54GKPtHJsSUUJza6cyfH9oJC','SUPER_ADMIN','Inactivo',0,'2026-07-17 19:26:39'),(4,5,'Yadiel','prueba0102@gmail.com','$2b$10$g/XH6iQFL1WjOmPx.Rixd.4p2osDOFQJn1JP8RoTPBmN85fBA6dC2','Admin','Activo',0,'2026-07-18 05:15:29'),(5,5,'walter Padilla','walkag@gmail.com','$2b$10$jn2.fy6T7WHVcsgPJenGwu.0ddlokYxvC99u.kgcbe6mMRNg554mO','Contador','Activo',0,'2026-07-18 05:20:05'),(6,5,'juancho','ddfd@localhost.com','$2b$10$y/GxHOVe67yBNEqGLXj1aej.m8JIMIRld9PFdK2poIDVrcA1PrfWO','Vendedor','Activo',0,'2026-07-18 08:55:49'),(7,6,'Juan Valdez','ddff@dospinos.com','$2b$10$QqcIGgWG4umR776Se.nnDuY4NDA.eV.CWvf3vs.9phPlp6T5otroO','Admin','Activo',0,'2026-07-19 03:15:42'),(8,6,'sdssdds','wlsj@gmail.com','$2b$10$/D1W/171i3epyrWqluSKYuy2.MSQGxAF24LDyy3CCuw6uYT/H58QC','Vendedor','Activo',0,'2026-07-19 05:17:05'),(9,2,'dhfhd','superl@gmil.com','$2b$10$1WXvBKGGZ5txyfXjzHLgKuZnjWDhGrcZTCdnMY1IkKdo.3mMTYG/i','Vendedor','Activo',0,'2026-07-19 05:20:48'),(10,1,'Walter Padilla','mapate@dospinos.com','$2b$10$L1mnAJgbVIyfhsN5zh97q.tAKUqjj4vYW9ufE2YcjyCwRNgTe1xoa','SUPER_ADMIN','Activo',0,'2026-07-19 06:48:42'),(11,7,'wakawaka','kaka@gmail.com','$2b$10$bXqNSNl1hUf0ZP4Oy6bmS.BchpUQuAIeW9s3s9wPA.REu65mdRJJ2','Admin','Activo',0,'2026-07-28 16:30:21');
+INSERT INTO `usuarios` VALUES (1,1,'SuperAdmin','superadmin@localhost.com','$2b$10$wgjSORjigZ8/CINJQoiCLu3lR4M5o9VCFSwWx0eVpVgCdEiG/5N/C','SUPER_ADMIN','Activo',0,'2026-07-17 19:19:30'),(2,4,'prueba01','prueba01@gmail.com','$2b$10$D.xMKwZVn8NjMaQq1PtvQ.hYMgKQbWhZP8d7J2l7SODTOB/XfPKGq','Admin','Inactivo',0,'2026-07-17 19:19:30'),(3,NULL,'Walter Padilla','waly04padilla@gmail.com','$2b$10$yrGmKjB.FFwT2QMFSCVikefSzOaYA54GKPtHJsSUUJza6cyfH9oJC','SUPER_ADMIN','Inactivo',0,'2026-07-17 19:26:39'),(4,5,'Yadiel','prueba0102@gmail.com','$2b$10$g/XH6iQFL1WjOmPx.Rixd.4p2osDOFQJn1JP8RoTPBmN85fBA6dC2','Admin','Activo',0,'2026-07-18 05:15:29'),(5,5,'walter Padilla','walkag@gmail.com','$2b$10$jn2.fy6T7WHVcsgPJenGwu.0ddlokYxvC99u.kgcbe6mMRNg554mO','Contador','Activo',0,'2026-07-18 05:20:05'),(6,5,'juancho','ddfd@localhost.com','$2b$10$y/GxHOVe67yBNEqGLXj1aej.m8JIMIRld9PFdK2poIDVrcA1PrfWO','Vendedor','Activo',0,'2026-07-18 08:55:49'),(7,6,'Juan Valdez','ddff@dospinos.com','$2b$10$QqcIGgWG4umR776Se.nnDuY4NDA.eV.CWvf3vs.9phPlp6T5otroO','Admin','Activo',0,'2026-07-19 03:15:42'),(8,6,'sdssdds','wlsj@gmail.com','$2b$10$/D1W/171i3epyrWqluSKYuy2.MSQGxAF24LDyy3CCuw6uYT/H58QC','Vendedor','Activo',0,'2026-07-19 05:17:05'),(9,2,'dhfhd','superl@gmil.com','$2b$10$1WXvBKGGZ5txyfXjzHLgKuZnjWDhGrcZTCdnMY1IkKdo.3mMTYG/i','Vendedor','Activo',0,'2026-07-19 05:20:48'),(10,1,'Walter Padilla','mapate@dospinos.com','$2b$10$L1mnAJgbVIyfhsN5zh97q.tAKUqjj4vYW9ufE2YcjyCwRNgTe1xoa','SUPER_ADMIN','Activo',0,'2026-07-19 06:48:42'),(11,7,'wakawaka','kaka@gmail.com','$2b$10$bXqNSNl1hUf0ZP4Oy6bmS.BchpUQuAIeW9s3s9wPA.REu65mdRJJ2','Admin','Activo',0,'2026-07-28 16:30:21'),(12,8,'Yandel','yandel@gmail.com','$2b$10$Isk7EErtrW.shIvVQIzaUOW7YC29xmpLRoddBjJ6BYtZJ4GU/005m','Admin','Activo',0,'2026-08-01 03:08:49');
 /*!40000 ALTER TABLE `usuarios` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -1254,6 +1695,67 @@ LOCK TABLES `vacaciones` WRITE;
 /*!40000 ALTER TABLE `vacaciones` DISABLE KEYS */;
 /*!40000 ALTER TABLE `vacaciones` ENABLE KEYS */;
 UNLOCK TABLES;
+
+--
+-- Table structure for table `vacunas`
+--
+
+DROP TABLE IF EXISTS `vacunas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `vacunas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `nombre` varchar(100) NOT NULL,
+  `descripcion` text,
+  `dias_recordatorio` int DEFAULT '365',
+  `activo` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  CONSTRAINT `vacunas_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `vacunas`
+--
+
+LOCK TABLES `vacunas` WRITE;
+/*!40000 ALTER TABLE `vacunas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `vacunas` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `whatsapp_log`
+--
+
+DROP TABLE IF EXISTS `whatsapp_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `whatsapp_log` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organizacion_id` int NOT NULL,
+  `telefono_destino` varchar(20) NOT NULL,
+  `mensaje` text NOT NULL,
+  `tipo` enum('Cita_Confirmacion','Recordatorio_Cita','Examen_Listo','Vacuna_Recordatorio') NOT NULL,
+  `referencia_id` int DEFAULT NULL,
+  `estado` enum('Enviado','Fallido') DEFAULT 'Enviado',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `organizacion_id` (`organizacion_id`),
+  CONSTRAINT `whatsapp_log_ibfk_1` FOREIGN KEY (`organizacion_id`) REFERENCES `organizaciones` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `whatsapp_log`
+--
+
+LOCK TABLES `whatsapp_log` WRITE;
+/*!40000 ALTER TABLE `whatsapp_log` DISABLE KEYS */;
+/*!40000 ALTER TABLE `whatsapp_log` ENABLE KEYS */;
+UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -1264,4 +1766,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-07-29 18:19:41
+-- Dump completed on 2026-08-01 23:09:10

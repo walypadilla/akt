@@ -105,11 +105,18 @@ const Organizations = () => {
   const handleSubmit = async (data) => {
     setSaving(true);
     try {
+      // Verificamos si los datos son de tipo FormData (cuando se selecciona una imagen)
+      const esFormData = data instanceof FormData;
+      
+      const config = esFormData ? {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      } : {};
+
       if (editingOrg) {
-        await updateOrganization(editingOrg.id, data);
+        await updateOrganization(editingOrg.id, data, config);
         toast.success('Organización actualizada correctamente');
       } else {
-        await createOrganization(data);
+        await createOrganization(data, config);
         toast.success('Organización creada exitosamente');
       }
       setShowModal(false);

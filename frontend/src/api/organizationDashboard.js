@@ -26,3 +26,8 @@ export const getOrganizationTopClients = async () => {
   const response = await apiClient.get('/organization-dashboard/top-clients');
   return response.data;
 };
+
+export const getMiConsumo = async () => {
+  const response = await apiClient.get('/organization/mi-consumo');
+  return response.data;
+};

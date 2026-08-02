@@ -5,6 +5,7 @@ const Producto = require('../models/Producto');
 const Proveedor = require('../models/Proveedor');
 const { pool } = require('../config/db');
 const PDFDocument = require('pdfkit');
+const InventoryMovement = require('../models/InventoryMovement');
 
 // ============================================================
 // FUNCIONES AUXILIARES
@@ -95,6 +96,7 @@ exports.crearCompra = async (req, res) => {
   try {
     await connection.beginTransaction();
     const organizacion_id = req.organizacion_id;
+    const usuario_id = req.usuario_id || req.user?.id || 1;
     const { detalles, ...compraData } = req.body;
 
     if (!compraData.proveedor_id) {
@@ -120,6 +122,7 @@ exports.crearCompra = async (req, res) => {
       compraData.percepcion_iva || 0
     );
 
+    // Insertar compra
     const compraId = await Compra.create({
       organizacion_id,
       ...compraData,
@@ -129,11 +132,33 @@ exports.crearCompra = async (req, res) => {
       proveedor_nombre: compraData.proveedor_nombre || 'Proveedor sin nombre',
     });
 
+    // Insertar detalles y movimientos de inventario
     if (detalles && detalles.length > 0) {
       await DetalleCompra.createMany(compraId, detalles);
       if (compraData.tipo_egreso === 'Compra') {
         for (const d of detalles) {
+          // Obtener stock actual antes del incremento
+          const producto = await Producto.findById(d.producto_id, organizacion_id);
+          const stockAnterior = producto ? producto.stock_actual : 0;
+          
+          // Incrementar stock
           await Producto.incrementStock(d.producto_id, organizacion_id, d.cantidad);
+          
+          // Registrar movimiento de entrada
+          await InventoryMovement.create({
+            organizacion_id,
+            producto_id: d.producto_id,
+            bodega_id: compraData.bodega_id || null,
+            tipo_movimiento: 'Entrada',
+            cantidad: d.cantidad,
+            stock_anterior: stockAnterior,
+            stock_nuevo: stockAnterior + parseFloat(d.cantidad),
+            referencia_tipo: 'Compra',
+            referencia_id: compraId,
+            costo_unitario: d.precio_unitario || 0,
+            observacion: `Compra #${compraData.numero_comprobante}`,
+            usuario_id: usuario_id,
+          });
         }
       }
     }
@@ -159,6 +184,7 @@ exports.actualizarCompra = async (req, res) => {
     await connection.beginTransaction();
     const { id } = req.params;
     const organizacion_id = req.organizacion_id;
+    const usuario_id = req.usuario_id || req.user?.id || 1;
     const { detalles, ...compraData } = req.body;
 
     const compra = await Compra.findById(id, organizacion_id);
@@ -192,19 +218,45 @@ exports.actualizarCompra = async (req, res) => {
       total,
     });
 
+    // Revertir movimientos viejos (si era compra, restar stock y eliminar movimientos)
     const oldDetalles = await DetalleCompra.findByCompraId(id);
     if (compra.tipo_egreso === 'Compra') {
       for (const d of oldDetalles) {
+        // Revertir stock (decrementar)
         await Producto.decrementStock(d.producto_id, organizacion_id, d.cantidad);
+        // Eliminar movimientos antiguos de esta compra
+        await connection.query(
+          'DELETE FROM movimientos_inventario WHERE referencia_tipo = "Compra" AND referencia_id = ? AND producto_id = ?',
+          [id, d.producto_id]
+        );
       }
     }
+
+    // Eliminar detalles viejos
     await DetalleCompra.deleteByCompraId(id);
 
+    // Insertar nuevos detalles y movimientos
     if (detalles && detalles.length > 0) {
       await DetalleCompra.createMany(id, detalles);
       if (compraData.tipo_egreso === 'Compra') {
         for (const d of detalles) {
+          const producto = await Producto.findById(d.producto_id, organizacion_id);
+          const stockAnterior = producto ? producto.stock_actual : 0;
           await Producto.incrementStock(d.producto_id, organizacion_id, d.cantidad);
+          await InventoryMovement.create({
+            organizacion_id,
+            producto_id: d.producto_id,
+            bodega_id: compraData.bodega_id || null,
+            tipo_movimiento: 'Entrada',
+            cantidad: d.cantidad,
+            stock_anterior: stockAnterior,
+            stock_nuevo: stockAnterior + parseFloat(d.cantidad),
+            referencia_tipo: 'Compra',
+            referencia_id: id,
+            costo_unitario: d.precio_unitario || 0,
+            observacion: `Compra #${compraData.numero_comprobante}`,
+            usuario_id: usuario_id,
+          });
         }
       }
     }
@@ -219,6 +271,7 @@ exports.actualizarCompra = async (req, res) => {
     connection.release();
   }
 };
+
 
 // ============================================================
 // 5. CANCELAR COMPRA (REVERTIR STOCK)
@@ -243,7 +296,13 @@ exports.cancelarCompra = async (req, res) => {
     const detalles = await DetalleCompra.findByCompraId(id);
     if (compra.tipo_egreso === 'Compra') {
       for (const d of detalles) {
-        await Producto.decrementStock(d.producto_id, organizacion_id, d.cantidad);
+        // Revertir stock
+        await Producto.decrementStock(d.producto_id, organizacion_id, d.cantidad, connection);
+        // Eliminar movimientos de inventario asociados a esta compra
+        await connection.query(
+          'DELETE FROM movimientos_inventario WHERE referencia_tipo = "Compra" AND referencia_id = ? AND organizacion_id = ? AND producto_id = ?',
+          [id, organizacion_id, d.producto_id]
+        );
       }
     }
 

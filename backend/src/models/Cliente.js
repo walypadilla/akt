@@ -341,6 +341,7 @@ class Cliente {
   // ============================================================
   // DATOS PARA GRÁFICAS
   // ============================================================
+
   static async getClientesPorMes(organizacion_id, anio) {
     const [rows] = await pool.query(
       `SELECT 
@@ -377,6 +378,23 @@ class Cliente {
     );
     return rows;
   }
+
+  // ============================================================
+  // VERIFICAR SI DUI YA EXISTE EN LA MISMA ORGANIZACIÓN
+  // ============================================================
+  static async existsDui(dui, organizacion_id, excludeId = null) {
+    if (!dui) return false;
+    const cleanDui = dui.replace(/[\s-]/g, '');
+    let sql = 'SELECT id FROM clientes WHERE dui = ? AND organizacion_id = ?';
+    const params = [cleanDui, organizacion_id];
+    if (excludeId) {
+      sql += ' AND id != ?';
+      params.push(excludeId);
+    }
+    const [rows] = await pool.query(sql, params);
+    return rows.length > 0;
+  }
+
 }
 
 module.exports = Cliente;

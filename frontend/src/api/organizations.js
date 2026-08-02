@@ -13,14 +13,14 @@ export const getOrganization = async (id) => {
 };
 
 // Crear organización
-export const createOrganization = async (data) => {
-  const response = await apiClient.post('/superadmin/organizaciones', data);
+export const createOrganization = async (data, config = {}) => {
+  const response = await apiClient.post('/superadmin/organizaciones', data, config);
   return response.data;
 };
 
 // Actualizar organización
-export const updateOrganization = async (id, data) => {
-  const response = await apiClient.put(`/superadmin/organizaciones/${id}`, data);
+export const updateOrganization = async (id, data, config = {}) => {
+  const response = await apiClient.put(`/superadmin/organizaciones/${id}`, data, config);
   return response.data;
 };
 

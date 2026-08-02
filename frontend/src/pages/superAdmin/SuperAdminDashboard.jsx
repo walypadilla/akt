@@ -1,6 +1,6 @@
 // frontend/src/pages/superadmin/SuperAdminDashboard.jsx
 import React, { useEffect, useState } from 'react';
-import { getSuperAdminDashboard } from '../../api/dashboard';
+import { getSuperAdminDashboard, getConsumoGlobal } from '../../api/dashboard';
 import {
   registrarPagoMembresia,
   registrarGastoSaaS,
@@ -29,6 +29,8 @@ import {
   ComposedChart,
 } from 'recharts';
 
+const COLORS = ['#8b5cf6', '#f43f5e', '#10b981', '#f59e0b', '#06b6d4', '#ec4899'];
+
 const SuperAdminDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +38,8 @@ const SuperAdminDashboard = () => {
   const [organizations, setOrganizations] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState('');
+  const [consumoData, setConsumoData] = useState([]);
+  const [selectedOrg, setSelectedOrg] = useState('all');
 
   // Estado para productos en el modal de factura
   const [productosSeleccionados, setProductosSeleccionados] = useState([
@@ -68,9 +72,21 @@ const SuperAdminDashboard = () => {
     }
   };
 
-  // Función para refrescar el dashboard
+  const loadProductos = async () => {
+    try {
+      const data = await getProductos({ limit: 99999 });
+      // getProductos devuelve { productos: [], paginacion: {...} }
+      const productos = Array.isArray(data) ? data : data.productos || [];
+      setProductosDisponibles(productos);
+    } catch (error) {
+      console.error('Error cargando productos:', error);
+      setProductosDisponibles([]);
+    }
+  };
+
   const refreshDashboard = () => {
     fetchData(filtros.periodo, filtros.anio, filtros.mes);
+    loadConsumoGlobal(filtros.anio);
     toast.info('Dashboard actualizado');
   };
 
@@ -88,17 +104,19 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const loadConsumoGlobal = async (anio) => {
+    try {
+      const data = await getConsumoGlobal({ anio: anio || filtros.anio });
+      setConsumoData(data || []);
+    } catch (error) {
+      console.error('Error cargando consumo global:', error);
+      setConsumoData([]);
+    }
+  };
+
   // Cargar productos al abrir el modal de factura
   useEffect(() => {
     if (modalOpen && modalType === 'factura') {
-      const loadProductos = async () => {
-        try {
-          const data = await getProductos();
-          setProductosDisponibles(data);
-        } catch (err) {
-          toast.error('Error al cargar productos');
-        }
-      };
       loadProductos();
     }
   }, [modalOpen, modalType]);
@@ -107,7 +125,12 @@ const SuperAdminDashboard = () => {
   useEffect(() => {
     fetchData(filtros.periodo, filtros.anio, filtros.mes);
     loadOrganizations();
+    loadConsumoGlobal(filtros.anio);
   }, []);
+
+  useEffect(() => {
+    loadConsumoGlobal(filtros.anio);
+  }, [filtros.anio]);
 
   // ========== FUNCIONES DE PRODUCTOS DINÁMICOS ==========
   const agregarProducto = () => {
@@ -133,6 +156,7 @@ const SuperAdminDashboard = () => {
   // ========== HANDLERS ==========
   const aplicarFiltros = () => {
     fetchData(filtros.periodo, filtros.anio, filtros.mes);
+    loadConsumoGlobal(filtros.anio);
     toast.info(`Filtros aplicados: ${filtros.periodo} - ${filtros.anio}${filtros.mes ? ` - Mes ${filtros.mes}` : ''}`);
   };
 
@@ -166,9 +190,8 @@ const SuperAdminDashboard = () => {
     }
   };
 
-  // ========== GENERAR FACTURA (CORREGIDO) ==========
+  // ========== GENERAR FACTURA ==========
   const handleGenerarFactura = async (data) => {
-    // Validar productos seleccionados
     const detalles = productosSeleccionados
       .filter(p => p.producto_id)
       .map(p => ({
@@ -185,54 +208,54 @@ const SuperAdminDashboard = () => {
     const total = detalles.reduce((acc, d) => acc + (d.precio_unitario * d.cantidad), 0);
     const orgNombre = organizations.find(o => o.id == data.organizacion_id)?.nombre_empresa || 'Organización';
 
-    // Abrir modal de confirmación
     setConfirmModal({
       isOpen: true,
       title: 'Confirmar Factura',
       message: `¿Generar factura por $${total.toFixed(2)} para "${orgNombre}"?`,
       onConfirm: async () => {
         setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: null });
-
         const payload = {
           organizacion_id: parseInt(data.organizacion_id),
           detalles: detalles
         };
-
         try {
-          console.log('📌 [FACTURA] Enviando payload:', payload);
           const response = await generarFacturaMembresia(payload);
-
-          console.log('📌 [FACTURA] Respuesta del servidor:', response);
-          console.log('📌 [FACTURA] numero_correlativo:', response?.numero_correlativo);
-          console.log('📌 [FACTURA] total:', response?.total);
-
           if (!response || !response.numero_correlativo) {
-            throw new Error('Respuesta del servidor inválida: falta numero_correlativo');
+            throw new Error('Respuesta del servidor inválida');
           }
-
-          const totalFactura = parseFloat(response.total) || 0;
-
-          toast.success(`✅ Factura generada: ${response.numero_correlativo} - $${totalFactura.toFixed(2)}`);
-
-          // ✅ CERRAR MODAL y resetear
+          toast.success(`✅ Factura generada: ${response.numero_correlativo} - $${parseFloat(response.total).toFixed(2)}`);
           setModalOpen(false);
           reset();
           setProductosSeleccionados([{ producto_id: '', cantidad: 1, precio: 0 }]);
-
-          // ✅ Refrescar dashboard
           refreshDashboard();
-
         } catch (err) {
-          console.error('❌ [FACTURA] Error en catch:', err);
-          console.error('❌ [FACTURA] err.response:', err.response);
-          console.error('❌ [FACTURA] err.response?.data:', err.response?.data);
-
           const mensajeError = err.response?.data?.message || err.message || 'Error al generar factura';
           toast.error(`❌ ${mensajeError}`);
         }
       }
     });
   };
+
+  // ========== PREPARAR DATOS PARA GRÁFICAS ==========
+  const organizaciones = [...new Set(consumoData.map(d => d.organizacion_id))];
+  const orgNames = {};
+  consumoData.forEach(d => {
+    orgNames[d.organizacion_id] = d.nombre_empresa;
+  });
+
+  const filteredData = selectedOrg === 'all'
+    ? consumoData
+    : consumoData.filter(d => d.organizacion_id === parseInt(selectedOrg));
+
+  const lineData = selectedOrg === 'all'
+    ? organizaciones.map(orgId => ({
+        name: orgNames[orgId] || `Org ${orgId}`,
+        data: consumoData.filter(d => d.organizacion_id === orgId)
+      }))
+    : [{
+        name: orgNames[selectedOrg] || `Org ${selectedOrg}`,
+        data: filteredData
+      }];
 
   // ========== RENDER ==========
   if (loading) return <LoadingSpinner />;
@@ -247,9 +270,8 @@ const SuperAdminDashboard = () => {
     <div className="p-6">
       {/* Header con botones */}
       <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-white">Dashboard de SuperAdmin</h1>
+        <h1 className="text-2xl font-bold text-white">Panel de SuperAdmin</h1>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Periodos */}
           <div className="flex items-center gap-1 bg-gray-800/90 p-1 rounded-lg border border-gray-700">
             {['mes', '6meses', 'trimestre', 'anual'].map((p) => (
               <button
@@ -338,6 +360,58 @@ const SuperAdminDashboard = () => {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Consumo mensual por organización (gráfica de líneas) */}
+      {consumoData.length > 0 && (
+        <div className="mt-6 bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-gray-200">📊 Consumo Mensual por Organización</h3>
+            <select
+              value={selectedOrg}
+              onChange={(e) => setSelectedOrg(e.target.value)}
+              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-1 text-white text-sm"
+            >
+              <option value="all">Todas</option>
+              {organizaciones.map(id => (
+                <option key={id} value={id}>{orgNames[id] || `Org ${id}`}</option>
+              ))}
+            </select>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="mes" stroke="#9ca3af" />
+              <YAxis stroke="#9ca3af" />
+              <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }} />
+              <Legend wrapperStyle={{ color: '#e5e7eb' }} />
+              {lineData.map((line, idx) => (
+                <React.Fragment key={idx}>
+                  <Line
+                    type="monotone"
+                    dataKey="facturas_generadas"
+                    data={line.data}
+                    stroke={COLORS[idx % COLORS.length]}
+                    name={`${line.name} (Facturas)`}
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="whatsapp_enviados"
+                    data={line.data}
+                    stroke={COLORS[(idx + 2) % COLORS.length]}
+                    name={`${line.name} (WhatsApp)`}
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    strokeDasharray="5 5"
+                  />
+                </React.Fragment>
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+          <p className="text-xs text-gray-400 mt-2">Línea sólida = Facturas generadas | Línea punteada = WhatsApp enviados</p>
+        </div>
+      )}
 
       {/* Top organizaciones */}
       <div className="mt-6">
@@ -453,7 +527,6 @@ const SuperAdminDashboard = () => {
             <h3 className="text-xl font-bold text-white mb-4">Emitir Factura de Membresía</h3>
             <p className="text-sm text-gray-400 mb-4">Selecciona los productos/servicios a facturar.</p>
             <form onSubmit={handleSubmit(handleGenerarFactura)} className="space-y-4">
-              {/* Organización */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Organización *</label>
                 <select
@@ -467,7 +540,6 @@ const SuperAdminDashboard = () => {
                 </select>
               </div>
 
-              {/* Productos dinámicos */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Productos / Conceptos</label>
                 {productosSeleccionados.map((item, index) => (
@@ -478,7 +550,7 @@ const SuperAdminDashboard = () => {
                       className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                     >
                       <option value="">Seleccionar producto</option>
-                      {productosDisponibles.map((p) => (
+                      {Array.isArray(productosDisponibles) && productosDisponibles.map((p) => (
                         <option key={p.id} value={p.id}>{p.nombre} - ${parseFloat(p.precio_unitario).toFixed(2)}</option>
                       ))}
                     </select>

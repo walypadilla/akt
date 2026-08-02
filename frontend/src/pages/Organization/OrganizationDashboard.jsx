@@ -1,6 +1,6 @@
 // frontend/src/pages/organization/OrganizationDashboard.jsx
 import React, { useEffect, useState } from 'react';
-import { getOrganizationDashboard } from '../../api/organizationDashboard';
+import { getOrganizationDashboard, getMiConsumo } from '../../api/organizationDashboard';
 import { getDashboardFacturacion } from '../../api/invoices';
 import KPICards from '../../components/common/KPICards';
 import TopClientsTable from '../../components/common/TopClientsTable';
@@ -55,6 +55,7 @@ const OrganizationDashboard = () => {
       setLoading(false);
     }
   };
+  const [consumo, setConsumo] = useState({ factura: { total: 0, limite: 40 }, whatsapp: { total: 0, limite: 200 } });
 
   useEffect(() => {
     fetchData(filtros.periodo, filtros.anio, filtros.mes);
@@ -64,6 +65,14 @@ const OrganizationDashboard = () => {
     fetchData(filtros.periodo, filtros.anio, filtros.mes);
     toast.info(`Filtros aplicados: ${filtros.periodo} - ${filtros.anio}${filtros.mes ? ` - Mes ${filtros.mes}` : ''}`);
   };
+
+  useEffect(() => {
+    const getConsumo = async () => {
+      const data = await getMiConsumo();
+      setConsumo(data);
+    };
+    getConsumo();
+  }, []);
 
   const cambiarPeriodo = (nuevoPeriodo) => {
     setFiltros((prev) => ({ ...prev, periodo: nuevoPeriodo }));
@@ -191,7 +200,58 @@ const OrganizationDashboard = () => {
             </PieChart>
           </ResponsiveContainer>
         </div>
+        
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+        {/* Facturas */}
+        <div className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700">
+          <div className="flex justify-between items-center mb-2">
+            <h4 className="text-sm font-semibold text-gray-300">📄 Facturas del mes</h4>
+            <span className="text-xs text-gray-400">{consumo.factura.total} / {consumo.factura.limite}</span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-3">
+            <div 
+              className={`h-3 rounded-full transition-all duration-500 ${
+                consumo.factura.total >= consumo.factura.limite ? 'bg-red-500' : 'bg-purple-600'
+              }`} 
+              style={{ width: `${Math.min((consumo.factura.total / consumo.factura.limite) * 100, 100)}%` }}
+            ></div>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            {consumo.factura.total >= consumo.factura.limite ? (
+              <span className="text-red-400 font-bold">⚠️ Límite alcanzado</span>
+            ) : (
+              <span>Disponibles: {consumo.factura.limite - consumo.factura.total}</span>
+            )}
+          </p>
+        </div>
+
+        {/* WhatsApp - Solo mostrar si está activado */}
+        {consumo.whatsapp.activado && (
+          <div className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700">
+            <div className="flex justify-between items-center mb-2">
+              <h4 className="text-sm font-semibold text-gray-300">💬 WhatsApp del mes</h4>
+              <span className="text-xs text-gray-400">{consumo.whatsapp.total} / {consumo.whatsapp.limite}</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-3">
+              <div 
+                className={`h-3 rounded-full transition-all duration-500 ${
+                  consumo.whatsapp.total >= consumo.whatsapp.limite ? 'bg-red-500' : 'bg-cyan-600'
+                }`} 
+                style={{ width: `${Math.min((consumo.whatsapp.total / consumo.whatsapp.limite) * 100, 100)}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              {consumo.whatsapp.total >= consumo.whatsapp.limite ? (
+                <span className="text-red-400 font-bold">⚠️ Límite alcanzado</span>
+              ) : (
+                <span>Disponibles: {consumo.whatsapp.limite - consumo.whatsapp.total}</span>
+              )}
+            </p>
+          </div>
+        )}
+      </div>
 
       <div className="mt-6">
         <TopClientsTable clients={topClientes} title={`Top Clientes por Facturación (${periodo?.label || 'periodo seleccionado'})`} />

@@ -14,11 +14,13 @@ const MHAuthHelper = require('../helpers/mhAuthHelper');
 const DTEJsonBuilder = require('../helpers/dteJsonBuilder');
 const DTEFirmaHelper = require('../helpers/dteFirmaHelper');
 const { generarUUID } = require('../helpers/uuidHelper');
+const InventoryMovement = require('../models/InventoryMovement');
 const axios = require('axios');
 const QRCode = require('qrcode');
 const AdmZip = require('adm-zip');
 const fs = require('fs');
 const path = require('path');
+const { verificarLimite, incrementarConsumo } = require('../helpers/consumoHelper');
 
 // ============================================================
 // FUNCIONES AUXILIARES
@@ -129,264 +131,389 @@ exports.obtenerFacturaPorId = async (req, res) => {
 // 3. CREAR FACTURA (CORREGIDO)
 // ============================================================
 exports.crearFactura = async (req, res) => {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        const organizacion_id = req.organizacion_id;
-        
-        let usuario_id = req.user?.id;
-        if (!usuario_id) {
-            const [admin] = await connection.query(
-                'SELECT id FROM usuarios WHERE organizacion_id = ? AND rol = "Admin" LIMIT 1',
-                [organizacion_id]
-            );
-            usuario_id = admin.length > 0 ? admin[0].id : (await connection.query('SELECT id FROM usuarios WHERE organizacion_id = ? LIMIT 1', [organizacion_id]))[0]?.id || 1;
-        }
-
-        const { detalles, ...facturaData } = req.body;
-
-        if (!facturaData.cliente_id) {
-            await connection.rollback();
-            return res.status(400).json({ message: 'El cliente es obligatorio' });
-        }
-        if (!detalles || detalles.length === 0) {
-            await connection.rollback();
-            return res.status(400).json({ message: 'Debe agregar al menos un producto' });
-        }
-
-        // Validar stock (incluyendo kits)
-        for (const d of detalles) {
-            const [producto] = await connection.query(
-                'SELECT stock_actual, nombre, es_kit FROM productos WHERE id = ? AND organizacion_id = ?',
-                [d.producto_id, organizacion_id]
-            );
-            if (producto.length === 0) {
-                await connection.rollback();
-                return res.status(400).json({ message: `Producto ID ${d.producto_id} no encontrado` });
-            }
-            if (producto[0].stock_actual < d.cantidad) {
-                await connection.rollback();
-                return res.status(400).json({
-                    message: `Stock insuficiente para "${producto[0].nombre}". Disponible: ${producto[0].stock_actual}, solicitado: ${d.cantidad}`
-                });
-            }
-            if (producto[0].es_kit === 1) {
-                const componentes = await Producto.getComponentes(d.producto_id, organizacion_id);
-                for (const comp of componentes) {
-                    const [compStock] = await connection.query(
-                        'SELECT stock_actual, nombre FROM productos WHERE id = ? AND organizacion_id = ?',
-                        [comp.producto_componente_id, organizacion_id]
-                    );
-                    const cantidadNecesaria = d.cantidad * comp.cantidad;
-                    if (compStock.length === 0 || compStock[0].stock_actual < cantidadNecesaria) {
-                        await connection.rollback();
-                        return res.status(400).json({
-                            message: `Stock insuficiente para componente "${compStock[0]?.nombre || comp.componente_nombre}". Disponible: ${compStock[0]?.stock_actual || 0}, necesarios: ${cantidadNecesaria}`
-                        });
-                    }
-                }
-            }
-        }
-
-        const cliente = await Cliente.findById(facturaData.cliente_id, organizacion_id);
-        if (!cliente) {
-            await connection.rollback();
-            return res.status(404).json({ message: 'Cliente no encontrado' });
-        }
-
-        let medioPago = facturaData.medio_pago;
-        if (typeof medioPago === 'string') {
-            try { medioPago = JSON.parse(medioPago); } catch { medioPago = [medioPago]; }
-        }
-        if (!Array.isArray(medioPago)) medioPago = [];
-
-        const { subtotal_sumas, iva_13, iva_0, iva_no_sujeto, total_pagar } = calcularTotalesFactura(
-            detalles,
-            facturaData.descuento || 0,
-            facturaData.intereses_mora || 0,
-            facturaData.retencion_1 || 0,
-            facturaData.percepcion_1 || 0
-        );
-
-        const [count] = await connection.query(
-            'SELECT COUNT(*) AS total FROM facturas WHERE organizacion_id = ?',
-            [organizacion_id]
-        );
-        const numero = `FAC-${String(count[0].total + 1).padStart(6, '0')}`;
-
-        const nuevaFactura = {
-            organizacion_id,
-            bodega_id: facturaData.bodega_id || null,
-            usuario_id,
-            cliente_id: facturaData.cliente_id,
-            tipo_documento: facturaData.tipo_documento || 'FAF',
-            numero_correlativo: numero,
-            subtotal_sumas,
-            descuento: facturaData.descuento || 0,
-            iva_13,
-            iva_0,
-            iva_no_sujeto,
-            retencion_1: facturaData.retencion_1 || 0,
-            percepcion_1: facturaData.percepcion_1 || 0,
-            intereses_mora: facturaData.intereses_mora || 0,
-            total_pagar,
-            estado: facturaData.estado || 'Emitida',
-            condicion_operacion: facturaData.condicion_operacion || 'Contado',
-            plazo_credito: facturaData.plazo_credito || null,
-            fecha_vencimiento: facturaData.fecha_vencimiento || null,
-            medio_pago: medioPago,
-            observaciones: facturaData.observaciones || null,
-            uuid_dte: facturaData.uuid_dte || null,
-            numero_control: facturaData.numero_control || null,
-            cliente_nit: cliente.nit,
-            cliente_dui: cliente.dui,
-            cliente_nombre: cliente.nombre,
-        };
-
-        const facturaId = await Factura.create(nuevaFactura, connection);
-
-        if (detalles && detalles.length > 0) {
-            await DetalleFactura.createMany(facturaId, detalles, connection);
-            if (facturaData.estado !== 'Borrador') {
-                for (const d of detalles) {
-                    // Descontar producto principal
-                    await Producto.decrementStock(d.producto_id, organizacion_id, d.cantidad, connection);
-                    // Descontar componentes si es kit
-                    const [producto] = await connection.query(
-                        'SELECT es_kit FROM productos WHERE id = ? AND organizacion_id = ?',
-                        [d.producto_id, organizacion_id]
-                    );
-                    if (producto.length > 0 && producto[0].es_kit === 1) {
-                        const componentes = await Producto.getComponentes(d.producto_id, organizacion_id);
-                        for (const comp of componentes) {
-                            await Producto.decrementStock(
-                                comp.producto_componente_id,
-                                organizacion_id,
-                                d.cantidad * comp.cantidad,
-                                connection
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        await connection.commit();
-        res.status(201).json({ message: 'Factura creada exitosamente', id: facturaId, numero });
-    } catch (error) {
-        await connection.rollback();
-        console.error('❌ Error al crear factura:', error);
-        res.status(500).json({ message: 'Error al crear factura', error: error.message });
-    } finally {
-        connection.release();
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const organizacion_id = req.organizacion_id;
+    
+    // Obtener usuario_id
+    let usuario_id = req.user?.id;
+    if (!usuario_id) {
+      const [admin] = await connection.query(
+        'SELECT id FROM usuarios WHERE organizacion_id = ? AND rol = "Admin" LIMIT 1',
+        [organizacion_id]
+      );
+      usuario_id = admin.length > 0 ? admin[0].id : (await connection.query('SELECT id FROM usuarios WHERE organizacion_id = ? LIMIT 1', [organizacion_id]))[0]?.id || 1;
     }
+
+    const { detalles, ...facturaData } = req.body;
+
+    if (!facturaData.cliente_id) {
+      await connection.rollback();
+      return res.status(400).json({ message: 'El cliente es obligatorio' });
+    }
+    if (!detalles || detalles.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({ message: 'Debe agregar al menos un producto' });
+    }
+
+    // ============================================================
+    // VERIFICAR LÍMITE DE FACTURAS DEL PLAN
+    // ============================================================
+    const limiteCheck = await verificarLimite(organizacion_id, 'factura');
+    if (!limiteCheck.allowed) {
+      await connection.rollback();
+      return res.status(400).json({ message: limiteCheck.message });
+    }
+
+    // ============================================================
+    // PASO 1: VALIDAR STOCK Y OBTENER DATOS DE PRODUCTOS
+    // ============================================================
+    const productosData = [];
+    for (const d of detalles) {
+      const [producto] = await connection.query(
+        'SELECT id, nombre, stock_actual, es_kit FROM productos WHERE id = ? AND organizacion_id = ?',
+        [d.producto_id, organizacion_id]
+      );
+      if (producto.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({ message: `Producto ID ${d.producto_id} no encontrado` });
+      }
+      if (producto[0].stock_actual < d.cantidad) {
+        await connection.rollback();
+        return res.status(400).json({
+          message: `Stock insuficiente para "${producto[0].nombre}". Disponible: ${producto[0].stock_actual}, solicitado: ${d.cantidad}`
+        });
+      }
+      productosData.push({
+        id: d.producto_id,
+        nombre: producto[0].nombre,
+        stock_actual: producto[0].stock_actual,
+        es_kit: producto[0].es_kit,
+        cantidad: d.cantidad,
+        precio_unitario: d.precio_unitario || 0,
+        descuento_item: d.descuento_item || 0,
+        tipo_venta: d.tipo_venta || 'Gravado',
+        producto_detalle: d,
+      });
+    }
+
+    // ============================================================
+    // PASO 2: VALIDAR STOCK DE COMPONENTES DE KITS
+    // ============================================================
+    for (const pData of productosData) {
+      if (pData.es_kit === 1) {
+        const componentes = await Producto.getComponentes(pData.id, organizacion_id);
+        for (const comp of componentes) {
+          const [compStock] = await connection.query(
+            'SELECT stock_actual, nombre FROM productos WHERE id = ? AND organizacion_id = ?',
+            [comp.producto_componente_id, organizacion_id]
+          );
+          const cantidadNecesaria = pData.cantidad * comp.cantidad;
+          if (compStock.length === 0 || compStock[0].stock_actual < cantidadNecesaria) {
+            await connection.rollback();
+            return res.status(400).json({
+              message: `Stock insuficiente para componente "${compStock[0]?.nombre || comp.componente_nombre}". Disponible: ${compStock[0]?.stock_actual || 0}, necesarios: ${cantidadNecesaria}`
+            });
+          }
+          if (!pData.componentes) pData.componentes = [];
+          pData.componentes.push({
+            componente_id: comp.producto_componente_id,
+            cantidad_necesaria: cantidadNecesaria,
+            nombre: compStock[0]?.nombre || comp.componente_nombre,
+            stock_actual: compStock[0]?.stock_actual || 0,
+            cantidad_por_kit: comp.cantidad,
+          });
+        }
+      }
+    }
+
+    // ============================================================
+    // PASO 3: OBTENER DATOS DEL CLIENTE
+    // ============================================================
+    const cliente = await Cliente.findById(facturaData.cliente_id, organizacion_id);
+    if (!cliente) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Cliente no encontrado' });
+    }
+
+    let medioPago = facturaData.medio_pago;
+    if (typeof medioPago === 'string') {
+      try { medioPago = JSON.parse(medioPago); } catch { medioPago = [medioPago]; }
+    }
+    if (!Array.isArray(medioPago)) medioPago = [];
+
+    // ============================================================
+    // PASO 4: CALCULAR TOTALES
+    // ============================================================
+    const { subtotal_sumas, iva_13, iva_0, iva_no_sujeto, total_pagar } = calcularTotalesFactura(
+      detalles,
+      facturaData.descuento || 0,
+      facturaData.intereses_mora || 0,
+      facturaData.retencion_1 || 0,
+      facturaData.percepcion_1 || 0
+    );
+
+    // ============================================================
+    // PASO 5: GENERAR NÚMERO CORRELATIVO
+    // ============================================================
+    const [count] = await connection.query(
+      'SELECT COUNT(*) AS total FROM facturas WHERE organizacion_id = ?',
+      [organizacion_id]
+    );
+    const numero = `FAC-${String(count[0].total + 1).padStart(6, '0')}`;
+
+    // ============================================================
+    // PASO 6: INSERTAR FACTURA
+    // ============================================================
+    const nuevaFactura = {
+      organizacion_id,
+      bodega_id: facturaData.bodega_id || null,
+      usuario_id,
+      cliente_id: facturaData.cliente_id,
+      tipo_documento: facturaData.tipo_documento || 'FAF',
+      numero_correlativo: numero,
+      subtotal_sumas,
+      descuento: facturaData.descuento || 0,
+      iva_13,
+      iva_0,
+      iva_no_sujeto,
+      retencion_1: facturaData.retencion_1 || 0,
+      percepcion_1: facturaData.percepcion_1 || 0,
+      intereses_mora: facturaData.intereses_mora || 0,
+      total_pagar,
+      estado: facturaData.estado || 'Emitida',
+      condicion_operacion: facturaData.condicion_operacion || 'Contado',
+      plazo_credito: facturaData.plazo_credito || null,
+      fecha_vencimiento: facturaData.fecha_vencimiento || null,
+      medio_pago: medioPago,
+      observaciones: facturaData.observaciones || null,
+      uuid_dte: facturaData.uuid_dte || null,
+      numero_control: facturaData.numero_control || null,
+      cliente_nit: cliente.nit,
+      cliente_dui: cliente.dui,
+      cliente_nombre: cliente.nombre,
+    };
+
+    const facturaId = await Factura.create(nuevaFactura, connection);
+
+    // ============================================================
+    // PASO 7: INSERTAR DETALLES Y ACTUALIZAR STOCK (CON MOVIMIENTOS)
+    // ============================================================
+    if (detalles && detalles.length > 0) {
+      // Insertar detalles
+      await DetalleFactura.createMany(facturaId, detalles, connection);
+
+      // Si la factura NO es borrador, descontar stock y registrar movimientos
+      if (facturaData.estado !== 'Borrador') {
+        // 7.1: Descontar productos principales
+        for (const pData of productosData) {
+          const stockAnterior = pData.stock_actual;
+          const nuevaCantidad = stockAnterior - pData.cantidad;
+
+          await connection.query(
+            'UPDATE productos SET stock_actual = ? WHERE id = ? AND organizacion_id = ?',
+            [nuevaCantidad, pData.id, organizacion_id]
+          );
+
+          // Registrar movimiento de inventario (Salida)
+          await InventoryMovement.create({
+            organizacion_id,
+            producto_id: pData.id,
+            bodega_id: facturaData.bodega_id || null,
+            tipo_movimiento: 'Salida',
+            cantidad: pData.cantidad,
+            stock_anterior: stockAnterior,
+            stock_nuevo: nuevaCantidad,
+            referencia_tipo: 'Factura',
+            referencia_id: facturaId,
+            costo_unitario: pData.precio_unitario || 0,
+            observacion: `Factura #${numero}`,
+            usuario_id: usuario_id,
+          }, connection);
+
+          // 7.2: Descontar componentes si es kit
+          if (pData.es_kit === 1 && pData.componentes) {
+            for (const comp of pData.componentes) {
+              const compStockAnterior = comp.stock_actual;
+              const compNuevaCantidad = compStockAnterior - comp.cantidad_necesaria;
+
+              await connection.query(
+                'UPDATE productos SET stock_actual = ? WHERE id = ? AND organizacion_id = ?',
+                [compNuevaCantidad, comp.componente_id, organizacion_id]
+              );
+
+              await InventoryMovement.create({
+                organizacion_id,
+                producto_id: comp.componente_id,
+                bodega_id: facturaData.bodega_id || null,
+                tipo_movimiento: 'Salida',
+                cantidad: comp.cantidad_necesaria,
+                stock_anterior: compStockAnterior,
+                stock_nuevo: compNuevaCantidad,
+                referencia_tipo: 'Factura_Kit',
+                referencia_id: facturaId,
+                costo_unitario: 0,
+                observacion: `Componente de kit para factura #${numero} (Producto: ${pData.nombre})`,
+                usuario_id: usuario_id,
+              }, connection);
+            }
+          }
+        }
+      }
+    }
+
+    // ============================================================
+    // PASO 8: INCREMENTAR CONSUMO DE FACTURAS
+    // ============================================================
+    await incrementarConsumo(organizacion_id, 'factura');
+
+    await connection.commit();
+    res.status(201).json({ message: 'Factura creada exitosamente', id: facturaId, numero });
+  } catch (error) {
+    await connection.rollback();
+    console.error('❌ Error al crear factura:', error);
+    res.status(500).json({ message: 'Error al crear factura', error: error.message });
+  } finally {
+    connection.release();
+  }
 };
 
 // ============================================================
 // 4. ACTUALIZAR FACTURA
 // ============================================================
 exports.editarFactura = async (req, res) => {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        const { id } = req.params;
-        const organizacion_id = req.organizacion_id;
-        const { detalles, ...facturaData } = req.body;
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { id } = req.params;
+    const organizacion_id = req.organizacion_id;
+    const usuario_id = req.user?.id || 1;
+    const { detalles, ...facturaData } = req.body;
 
-        const facturaActual = await Factura.findByIdAndOrganizacion(id, organizacion_id);
-        if (!facturaActual) {
-            await connection.rollback();
-            return res.status(404).json({ message: 'Factura no encontrada' });
-        }
-        if (facturaActual.estado === 'Pagada' || facturaActual.estado === 'Anulada') {
-            await connection.rollback();
-            return res.status(400).json({ message: 'No se puede editar una factura pagada o anulada' });
-        }
-
-        // Obtener usuario_id (se mantiene el mismo)
-        const usuario_id = facturaActual.usuario_id;
-
-        // Recalcular totales
-        const { subtotal_sumas, iva_13, iva_0, iva_no_sujeto, total_pagar } = calcularTotalesFactura(
-            detalles || [],
-            facturaData.descuento || 0,
-            facturaData.intereses_mora || 0,
-            facturaData.retencion_1 || 0,
-            facturaData.percepcion_1 || 0
-        );
-
-        // Actualizar factura
-        const updated = await Factura.update(id, organizacion_id, {
-            ...facturaData,
-            subtotal_sumas,
-            iva_13,
-            iva_0,
-            iva_no_sujeto,
-            total_pagar,
-        });
-        if (!updated) {
-            await connection.rollback();
-            return res.status(404).json({ message: 'Factura no encontrada' });
-        }
-
-        // Revertir stock anterior (incrementar)
-        const oldDetalles = await DetalleFactura.findByFacturaId(id);
-        if (facturaActual.estado !== 'Borrador' && facturaActual.estado !== 'Anulada') {
-            for (const d of oldDetalles) {
-                await Producto.incrementStock(d.producto_id, organizacion_id, d.cantidad);
-                // Revertir componentes si es kit
-                const [producto] = await connection.query(
-                    'SELECT es_kit FROM productos WHERE id = ? AND organizacion_id = ?',
-                    [d.producto_id, organizacion_id]
-                );
-                if (producto.length > 0 && producto[0].es_kit === 1) {
-                    const componentes = await Producto.getComponentes(d.producto_id, organizacion_id);
-                    for (const comp of componentes) {
-                        await Producto.incrementStock(
-                            comp.producto_componente_id,
-                            organizacion_id,
-                            d.cantidad * comp.cantidad
-                        );
-                    }
-                }
-            }
-        }
-        // Eliminar detalles viejos
-        await DetalleFactura.deleteByFacturaId(id, connection);
-
-        // Insertar nuevos detalles y descontar nuevo stock
-        if (detalles && detalles.length > 0) {
-            await DetalleFactura.createMany(id, detalles, connection);
-            if (facturaData.estado !== 'Borrador') {
-                for (const d of detalles) {
-                    await Producto.decrementStock(d.producto_id, organizacion_id, d.cantidad);
-                    const [producto] = await connection.query(
-                        'SELECT es_kit FROM productos WHERE id = ? AND organizacion_id = ?',
-                        [d.producto_id, organizacion_id]
-                    );
-                    if (producto.length > 0 && producto[0].es_kit === 1) {
-                        const componentes = await Producto.getComponentes(d.producto_id, organizacion_id);
-                        for (const comp of componentes) {
-                            await Producto.decrementStock(
-                                comp.producto_componente_id,
-                                organizacion_id,
-                                d.cantidad * comp.cantidad
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        await connection.commit();
-        res.json({ message: 'Factura actualizada exitosamente' });
-    } catch (error) {
-        await connection.rollback();
-        console.error('❌ Error al editar factura:', error);
-        res.status(500).json({ message: 'Error al editar factura', error: error.message });
-    } finally {
-        connection.release();
+    const facturaActual = await Factura.findByIdAndOrganizacion(id, organizacion_id);
+    if (!facturaActual) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Factura no encontrada' });
     }
+    if (facturaActual.estado === 'Pagada' || facturaActual.estado === 'Anulada') {
+      await connection.rollback();
+      return res.status(400).json({ message: 'No se puede editar una factura pagada o anulada' });
+    }
+
+    // Recalcular totales
+    const { subtotal_sumas, iva_13, iva_0, iva_no_sujeto, total_pagar } = calcularTotalesFactura(
+      detalles || [],
+      facturaData.descuento || 0,
+      facturaData.intereses_mora || 0,
+      facturaData.retencion_1 || 0,
+      facturaData.percepcion_1 || 0
+    );
+
+    await Factura.update(id, organizacion_id, {
+      ...facturaData,
+      subtotal_sumas,
+      iva_13,
+      iva_0,
+      iva_no_sujeto,
+      total_pagar,
+    });
+
+    // Revertir stock y movimientos anteriores (si no era borrador)
+    const oldDetalles = await DetalleFactura.findByFacturaId(id);
+    if (facturaActual.estado !== 'Borrador' && facturaActual.estado !== 'Anulada') {
+      for (const d of oldDetalles) {
+        // Revertir stock (incrementar)
+        await Producto.incrementStock(d.producto_id, organizacion_id, d.cantidad);
+        // Eliminar movimientos antiguos de esta factura
+        await connection.query(
+          'DELETE FROM movimientos_inventario WHERE referencia_tipo = "Factura" AND referencia_id = ? AND producto_id = ?',
+          [id, d.producto_id]
+        );
+        // Revertir componentes si es kit
+        const [producto] = await connection.query(
+          'SELECT es_kit FROM productos WHERE id = ? AND organizacion_id = ?',
+          [d.producto_id, organizacion_id]
+        );
+        if (producto.length > 0 && producto[0].es_kit === 1) {
+          const componentes = await Producto.getComponentes(d.producto_id, organizacion_id);
+          for (const comp of componentes) {
+            await Producto.incrementStock(comp.producto_componente_id, organizacion_id, d.cantidad * comp.cantidad);
+            await connection.query(
+              'DELETE FROM movimientos_inventario WHERE referencia_tipo = "FacturaKit" AND referencia_id = ? AND producto_id = ?',
+              [id, comp.producto_componente_id]
+            );
+          }
+        }
+      }
+    }
+
+    // Eliminar detalles viejos
+    await DetalleFactura.deleteByFacturaId(id, connection);
+
+    // Insertar nuevos detalles y descontar nuevo stock
+    if (detalles && detalles.length > 0) {
+      await DetalleFactura.createMany(id, detalles, connection);
+      if (facturaData.estado !== 'Borrador') {
+        for (const d of detalles) {
+          const producto = await Producto.findById(d.producto_id, organizacion_id);
+          const stockAnterior = producto ? producto.stock_actual : 0;
+          await Producto.decrementStock(d.producto_id, organizacion_id, d.cantidad);
+          await InventoryMovement.create({
+            organizacion_id,
+            producto_id: d.producto_id,
+            bodega_id: facturaData.bodega_id || null,
+            tipo_movimiento: 'Salida',
+            cantidad: d.cantidad,
+            stock_anterior: stockAnterior,
+            stock_nuevo: stockAnterior - parseFloat(d.cantidad),
+            referencia_tipo: 'Factura',
+            referencia_id: id,
+            costo_unitario: d.precio_unitario || 0,
+            observacion: `Factura #${facturaActual.numero_correlativo}`,
+            usuario_id: usuario_id,
+          });
+
+          const [productoInfo] = await connection.query(
+            'SELECT es_kit FROM productos WHERE id = ? AND organizacion_id = ?',
+            [d.producto_id, organizacion_id]
+          );
+          if (productoInfo.length > 0 && productoInfo[0].es_kit === 1) {
+            const componentes = await Producto.getComponentes(d.producto_id, organizacion_id);
+            for (const comp of componentes) {
+              const compProducto = await Producto.findById(comp.producto_componente_id, organizacion_id);
+              const compStockAnterior = compProducto ? compProducto.stock_actual : 0;
+              const cantidadComp = d.cantidad * comp.cantidad;
+              await Producto.decrementStock(comp.producto_componente_id, organizacion_id, cantidadComp);
+              await InventoryMovement.create({
+                organizacion_id,
+                producto_id: comp.producto_componente_id,
+                bodega_id: facturaData.bodega_id || null,
+                tipo_movimiento: 'Salida',
+                cantidad: cantidadComp,
+                stock_anterior: compStockAnterior,
+                stock_nuevo: compStockAnterior - cantidadComp,
+                referencia_tipo: 'FacturaKit',
+                referencia_id: id,
+                costo_unitario: comp.precio_unitario || 0,
+                observacion: `Kit #${facturaActual.numero_correlativo} - Componente ${comp.componente_nombre}`,
+                usuario_id: usuario_id,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    await connection.commit();
+    res.json({ message: 'Factura actualizada exitosamente' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('❌ Error al editar factura:', error);
+    res.status(500).json({ message: 'Error al editar factura', error: error.message });
+  } finally {
+    connection.release();
+  }
 };
 
 // ============================================================
@@ -420,58 +547,64 @@ exports.cambiarEstadoFactura = async (req, res) => {
 // 6. ANULAR FACTURA
 // ============================================================
 exports.anularFactura = async (req, res) => {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        const { id } = req.params;
-        const organizacion_id = req.organizacion_id;
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { id } = req.params;
+    const organizacion_id = req.organizacion_id;
 
-        const factura = await Factura.findByIdAndOrganizacion(id, organizacion_id);
-        if (!factura) {
-            await connection.rollback();
-            return res.status(404).json({ message: 'Factura no encontrada' });
-        }
-        if (factura.estado === 'Anulada') {
-            await connection.rollback();
-            return res.status(400).json({ message: 'Factura ya está anulada' });
-        }
-        if (factura.estado === 'Pagada') {
-            await connection.rollback();
-            return res.status(400).json({ message: 'No se puede anular una factura pagada' });
-        }
-
-        if (factura.estado !== 'Borrador') {
-            const detalles = await DetalleFactura.findByFacturaId(id);
-            for (const d of detalles) {
-                await Producto.incrementStock(d.producto_id, organizacion_id, d.cantidad);
-                // Revertir componentes si es kit
-                const [producto] = await connection.query(
-                    'SELECT es_kit FROM productos WHERE id = ? AND organizacion_id = ?',
-                    [d.producto_id, organizacion_id]
-                );
-                if (producto.length > 0 && producto[0].es_kit === 1) {
-                    const componentes = await Producto.getComponentes(d.producto_id, organizacion_id);
-                    for (const comp of componentes) {
-                        await Producto.incrementStock(
-                            comp.producto_componente_id,
-                            organizacion_id,
-                            d.cantidad * comp.cantidad
-                        );
-                    }
-                }
-            }
-        }
-
-        await Factura.softDelete(id, organizacion_id);
-        await connection.commit();
-        res.json({ message: 'Factura anulada exitosamente' });
-    } catch (error) {
-        await connection.rollback();
-        console.error('❌ Error al anular factura:', error);
-        res.status(500).json({ message: 'Error al anular factura', error: error.message });
-    } finally {
-        connection.release();
+    const factura = await Factura.findByIdAndOrganizacion(id, organizacion_id);
+    if (!factura) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Factura no encontrada' });
     }
+    if (factura.estado === 'Anulada') {
+      await connection.rollback();
+      return res.status(400).json({ message: 'Factura ya está anulada' });
+    }
+    if (factura.estado === 'Pagada') {
+      await connection.rollback();
+      return res.status(400).json({ message: 'No se puede anular una factura pagada' });
+    }
+
+    if (factura.estado !== 'Borrador') {
+      const detalles = await DetalleFactura.findByFacturaId(id);
+      for (const d of detalles) {
+        // Revertir stock (incrementar)
+        await Producto.incrementStock(d.producto_id, organizacion_id, d.cantidad);
+        // Eliminar movimientos de esta factura
+        await connection.query(
+          'DELETE FROM movimientos_inventario WHERE referencia_tipo = "Factura" AND referencia_id = ? AND producto_id = ?',
+          [id, d.producto_id]
+        );
+        // Revertir componentes si es kit
+        const [producto] = await connection.query(
+          'SELECT es_kit FROM productos WHERE id = ? AND organizacion_id = ?',
+          [d.producto_id, organizacion_id]
+        );
+        if (producto.length > 0 && producto[0].es_kit === 1) {
+          const componentes = await Producto.getComponentes(d.producto_id, organizacion_id);
+          for (const comp of componentes) {
+            await Producto.incrementStock(comp.producto_componente_id, organizacion_id, d.cantidad * comp.cantidad);
+            await connection.query(
+              'DELETE FROM movimientos_inventario WHERE referencia_tipo = "FacturaKit" AND referencia_id = ? AND producto_id = ?',
+              [id, comp.producto_componente_id]
+            );
+          }
+        }
+      }
+    }
+
+    await Factura.softDelete(id, organizacion_id);
+    await connection.commit();
+    res.json({ message: 'Factura anulada exitosamente' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('❌ Error al anular factura:', error);
+    res.status(500).json({ message: 'Error al anular factura', error: error.message });
+  } finally {
+    connection.release();
+  }
 };
 
 // ============================================================
@@ -666,18 +799,34 @@ exports.generarPDFFactura = async (req, res) => {
         const primaryColor = '#1a1a2e';
         const textColor = '#333333';
         const lightGray = '#f5f5f5';
+        
+        // ===== LOGO DE LA ORGANIZACIÓN (A LA IZQUIERDA) =====
+        const [orgLogo] = await pool.query('SELECT logo_url FROM organizaciones WHERE id = ?', [organizacion_id]);
+        const logoUrl = orgLogo[0]?.logo_url;
+        
+        let alturaLogo = 40; 
+
+        if (logoUrl) {
+          // Ajustamos la ruta para salir de 'src/controllers' hacia la raíz de 'backend'
+          const logoPath = path.join(__dirname, '../..', logoUrl);
+          if (fs.existsSync(logoPath)) {
+            doc.image(logoPath, 40, 40, { fit: [120, 60] });
+            alturaLogo = 105; 
+          }
+        }
 
         // Encabezado
         doc.font('Helvetica-Bold').fontSize(20).fillColor(primaryColor);
-        doc.text('FACTURA', 40, 40);
+        doc.text('FACTURA', 350, 40, { width: 205, align: 'right' });
         doc.fontSize(10).fillColor('#666666');
-        doc.text(`N° ${factura.numero_correlativo}`, 40, doc.y - 5);
+        doc.text(`N° ${factura.numero_correlativo}`, 350, 65, { width: 205, align: 'right' });
         const fechaFormateada = new Date(factura.creado_en).toLocaleDateString('es-SV');
-        doc.text(`Fecha: ${fechaFormateada}`, { align: 'right' });
+        doc.text(`Fecha: ${fechaFormateada}`, 350, 80, { width: 205, align: 'right' });
 
         // ===== DATOS DEL EMISOR (Dinámicos) =====
         doc.moveDown(2);
-        const emisorTop = doc.y;
+        const emisorTop = Math.max(doc.y + 25, alturaLogo, 115);
+        doc.y = emisorTop;
         doc.font('Helvetica-Bold').fontSize(10).fillColor(textColor);
         doc.text('EMISOR', 40, emisorTop);
         doc.font('Helvetica').fontSize(9).fillColor('#555555');
@@ -1265,27 +1414,51 @@ async function generarContenidoPDF(doc, factura, detalles) {
     const primaryColor = '#1a1a2e';
     const textColor = '#333333';
     const lightGray = '#f5f5f5';
+    
+    // ===== LOGO DE LA ORGANIZACIÓN (A LA IZQUIERDA) =====
+    const [orgLogo] = await pool.query('SELECT logo_url FROM organizaciones WHERE id = ?', [organizacion_id]);
+    const logoUrl = orgLogo[0]?.logo_url;
+    
+    let alturaLogo = 40; 
+
+    if (logoUrl) {
+      // Ajustamos la ruta para salir de 'src/controllers' hacia la raíz de 'backend'
+      const logoPath = path.join(__dirname, '../..', logoUrl);
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 40, 40, { fit: [120, 60] });
+        alturaLogo = 105; 
+      }
+    }
 
     // Encabezado
     doc.font('Helvetica-Bold').fontSize(20).fillColor(primaryColor);
-    doc.text('FACTURA', 40, 40);
-    doc.fontSize(10).fillColor('#666666');
-    doc.text(`N° ${factura.numero_correlativo}`, 40, doc.y - 5);
-    const fechaFormateada = new Date(factura.creado_en).toLocaleDateString('es-SV');
-    doc.text(`Fecha: ${fechaFormateada}`, { align: 'right' });
+        doc.text('FACTURA', 350, 40, { width: 205, align: 'right' });
+        doc.fontSize(10).fillColor('#666666');
+        doc.text(`N° ${factura.numero_correlativo}`, 350, 65, { width: 205, align: 'right' });
+        const fechaFormateada = new Date(factura.creado_en).toLocaleDateString('es-SV');
+        doc.text(`Fecha: ${fechaFormateada}`, 350, 80, { width: 205, align: 'right' });
 
     // Emisor
     doc.moveDown(2);
-    const emisorTop = doc.y;
+    const emisorTop = Math.max(doc.y + 25, alturaLogo, 115);
+    doc.y = emisorTop;
     doc.font('Helvetica-Bold').fontSize(10).fillColor(textColor);
     doc.text('EMISOR', 40, emisorTop);
     doc.font('Helvetica').fontSize(9).fillColor('#555555');
-    doc.text('MK sor', 40, doc.y);
-    doc.text('NIT: 0804-0123-101-6', 40, doc.y);
-    doc.text('NRC: 95899565', 40, doc.y);
-    doc.text('Colonia Divina Providencia, BK Y Pasaje 7', 40, doc.y);
-    doc.text('Tel: 71409016', 40, doc.y);
-    const emisorBottom = doc.y;
+    doc.text(organizacion.nombre_empresa || 'Empresa', 40, doc.y);
+    if (organizacion.nit) doc.text(`NIT: ${organizacion.nit}`, 40, doc.y);
+    if (organizacion.nrc) doc.text(`NRC: ${organizacion.nrc}`, 40, doc.y);
+    if (organizacion.direccion) doc.text(organizacion.direccion, 40, doc.y);
+    if (organizacion.telefono) doc.text(`Tel: ${organizacion.telefono}`, 40, doc.y);
+    if (organizacion.correo_contacto) doc.text(`Email: ${organizacion.correo_contacto}`, 40, doc.y);
+
+    // "Atendido por" debajo del emisor
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(textColor);
+    doc.text('Atendido por:', 40, doc.y + 5);
+    doc.font('Helvetica').fillColor('#555555');
+    doc.text(usuarioNombre, 120, doc.y - 2);
+
+    const emisorBottom = doc.y + 5;
 
     // Cliente
     doc.font('Helvetica-Bold').fontSize(10).fillColor(textColor);
@@ -1704,27 +1877,42 @@ async function generarPDFFacturaBuffer(id, organizacion_id) {
             const primaryColor = '#1a1a2e';
             const textColor = '#333333';
             const lightGray = '#f5f5f5';
+            
+            const [orgLogo] = await pool.query('SELECT logo_url FROM organizaciones WHERE id = ?', [organizacion_id]);
+        const logoUrl = orgLogo[0]?.logo_url;
+        
+            let alturaLogo = 40; 
+
+            if (logoUrl) {
+              // Ajustamos la ruta para salir de 'src/controllers' hacia la raíz de 'backend'
+              const logoPath = path.join(__dirname, '../..', logoUrl);
+              if (fs.existsSync(logoPath)) {
+                doc.image(logoPath, 40, 40, { fit: [120, 60] });
+                alturaLogo = 105; 
+              }
+            }
 
             // Encabezado
             doc.font('Helvetica-Bold').fontSize(20).fillColor(primaryColor);
-            doc.text('FACTURA', 40, 40);
+            doc.text('FACTURA', 350, 40, { width: 205, align: 'right' });
             doc.fontSize(10).fillColor('#666666');
-            doc.text(`N° ${factura.numero_correlativo}`, 40, doc.y - 5);
+            doc.text(`N° ${factura.numero_correlativo}`, 350, 65, { width: 205, align: 'right' });
             const fechaFormateada = new Date(factura.creado_en).toLocaleDateString('es-SV');
-            doc.text(`Fecha: ${fechaFormateada}`, { align: 'right' });
+            doc.text(`Fecha: ${fechaFormateada}`, 350, 80, { width: 205, align: 'right' });
 
             // ===== DATOS DEL EMISOR (Dinámicos) =====
             doc.moveDown(2);
-            const emisorTop = doc.y;
-            doc.font('Helvetica-Bold').fontSize(10).fillColor(textColor);
-            doc.text('EMISOR', 40, emisorTop);
-            doc.font('Helvetica').fontSize(9).fillColor('#555555');
-            doc.text(organizacion.nombre_empresa || 'Empresa', 40, doc.y);
-            if (organizacion.nit) doc.text(`NIT: ${organizacion.nit}`, 40, doc.y);
-            if (organizacion.nrc) doc.text(`NRC: ${organizacion.nrc}`, 40, doc.y);
-            if (organizacion.direccion) doc.text(organizacion.direccion, 40, doc.y);
-            if (organizacion.telefono) doc.text(`Tel: ${organizacion.telefono}`, 40, doc.y);
-            if (organizacion.correo_contacto) doc.text(`Email: ${organizacion.correo_contacto}`, 40, doc.y);
+        const emisorTop = Math.max(doc.y + 25, alturaLogo, 115);
+        doc.y = emisorTop;
+        doc.font('Helvetica-Bold').fontSize(10).fillColor(textColor);
+        doc.text('EMISOR', 40, emisorTop);
+        doc.font('Helvetica').fontSize(9).fillColor('#555555');
+        doc.text(organizacion.nombre_empresa || 'Empresa', 40, doc.y);
+        if (organizacion.nit) doc.text(`NIT: ${organizacion.nit}`, 40, doc.y);
+        if (organizacion.nrc) doc.text(`NRC: ${organizacion.nrc}`, 40, doc.y);
+        if (organizacion.direccion) doc.text(organizacion.direccion, 40, doc.y);
+        if (organizacion.telefono) doc.text(`Tel: ${organizacion.telefono}`, 40, doc.y);
+        if (organizacion.correo_contacto) doc.text(`Email: ${organizacion.correo_contacto}`, 40, doc.y);
 
             // "Atendido por" debajo del emisor
             doc.font('Helvetica-Bold').fontSize(9).fillColor(textColor);

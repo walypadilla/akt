@@ -17,7 +17,7 @@ const router = express.Router();
 router.use(authMiddleware);
 // --------------------------------------------
 router.get('/mi-organizacion', organizationDashboardController.obtenerMiOrganizacion);
-
+router.get('/mi-consumo', organizationDashboardController.obtenerMiConsumo);
 
 // ========== CLIENTES ==========
 router.get('/clientes', clienteController.obtenerClientes);
@@ -159,10 +159,12 @@ router.get('/inventario/ajustes', inventoryController.getAjustes);
 router.get('/inventario/reportes/pareto', inventoryController.getPareto);
 router.get('/inventario/reportes/lento-movimiento', inventoryController.getLentoMovimiento);
 router.get('/inventario/reportes/valoracion', inventoryController.getValoracionInventario);
+router.get('/inventario/reportes/exportar/movimientos-producto', inventoryController.exportarMovimientosProducto);
 router.get('/inventario/reportes/toma-fisica', inventoryController.getTomaFisica);
 router.get('/inventario/reportes/exportar/:tipo', inventoryController.exportarReporte);
 router.get('/inventario/reportes/exportar-tabla', inventoryController.exportarTabla);
 router.get('/inventario/reportes/top-cambios-precio', inventoryController.getTopCambiosPrecio);
+
 
 // ---------- KITS ----------
 router.get('/inventario/kits/:producto_kit_id', inventoryController.getKitComponentes);

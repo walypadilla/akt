@@ -9,7 +9,7 @@ import {
   getProyeccionAgotamientoMasiva,
   getCategorias,
   getMarcas,
-  getAniosDisponibles
+  getAniosDisponibles,
 } from '../../api/inventory';
 import { getBodegas, createWarehouse, updateWarehouse, deleteWarehouse } from '../../api/warehouses';
 import { getEtiquetas } from '../../api/tags';
@@ -28,6 +28,8 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
   ComposedChart,
 } from 'recharts';
@@ -326,43 +328,62 @@ const InventarioDashboard = () => {
 
   const handleExportarReporte = async (tipo) => {
     try {
-      if (['kardex', 'rentabilidad'].includes(tipo)) {
-        const inicio = new Date(reporteFechas.fecha_inicio);
-        const fin = new Date(reporteFechas.fecha_fin);
-        const hoyFecha = new Date();
-        hoyFecha.setHours(0, 0, 0, 0);
-        if (isNaN(inicio) || isNaN(fin)) {
-          toast.error('Formato de fecha inválido');
-          return;
-        }
-        if (inicio > fin) {
-          toast.error('La fecha de inicio no puede ser mayor a la fecha final');
-          return;
-        }
-        if (inicio > hoyFecha) {
-          toast.error('La fecha de inicio no puede ser mayor a hoy');
-          return;
-        }
-        if (fin > hoyFecha) {
-          toast.error('La fecha final no puede ser mayor a hoy');
-          return;
+      // ============================================================
+      // Validaciones de fechas para reportes que usan fechas
+      // ============================================================
+      if (['kardex', 'rentabilidad', 'movimientos-producto'].includes(tipo)) {
+        // Si no hay fechas, no validamos (el backend usará el año actual)
+        if (reporteFechas.fecha_inicio && reporteFechas.fecha_fin) {
+          const inicio = new Date(reporteFechas.fecha_inicio);
+          const fin = new Date(reporteFechas.fecha_fin);
+          const hoyFecha = new Date();
+          hoyFecha.setHours(0, 0, 0, 0);
+          if (isNaN(inicio) || isNaN(fin)) {
+            toast.error('Formato de fecha inválido');
+            return;
+          }
+          if (inicio > fin) {
+            toast.error('La fecha de inicio no puede ser mayor a la fecha final');
+            return;
+          }
+          if (inicio > hoyFecha) {
+            toast.error('La fecha de inicio no puede ser mayor a hoy');
+            return;
+          }
+          if (fin > hoyFecha) {
+            toast.error('La fecha final no puede ser mayor a hoy');
+            return;
+          }
         }
       }
 
+      // ============================================================
+      // Construcción de parámetros
+      // ============================================================
       const params = {};
+
       if (tipo === 'kardex') {
         if (selectedProducto) params.producto_id = selectedProducto.id;
-        params.fecha_inicio = reporteFechas.fecha_inicio;
-        params.fecha_fin = reporteFechas.fecha_fin;
+        if (reporteFechas.fecha_inicio) params.fecha_inicio = reporteFechas.fecha_inicio;
+        if (reporteFechas.fecha_fin) params.fecha_fin = reporteFechas.fecha_fin;
       }
+
       if (tipo === 'rentabilidad') {
-        params.fecha_inicio = reporteFechas.fecha_inicio;
-        params.fecha_fin = reporteFechas.fecha_fin;
+        if (reporteFechas.fecha_inicio) params.fecha_inicio = reporteFechas.fecha_inicio;
+        if (reporteFechas.fecha_fin) params.fecha_fin = reporteFechas.fecha_fin;
         if (selectedProducto) params.producto_id = selectedProducto.id;
       }
+
+      if (tipo === 'movimientos-producto') {
+        if (reporteFechas.fecha_inicio) params.fecha_inicio = reporteFechas.fecha_inicio;
+        if (reporteFechas.fecha_fin) params.fecha_fin = reporteFechas.fecha_fin;
+        // Nota: no necesita producto_id porque agrupa todos
+      }
+
       if (tipo === 'lento-movimiento') {
         params.dias = 5;
       }
+
       if (['toma-fisica', 'valoracion', 'top-cambios-precio'].includes(tipo)) {
         params.estado_stock = filtros.estado_stock;
         params.tipo_producto = filtros.tipo;
@@ -372,6 +393,9 @@ const InventarioDashboard = () => {
         params.etiqueta_id = filtros.etiqueta_id;
       }
 
+      // ============================================================
+      // Llamada al endpoint genérico de exportación
+      // ============================================================
       const blob = await exportarReporte(tipo, params);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -380,6 +404,7 @@ const InventarioDashboard = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success('Reporte descargado');
+
     } catch (err) {
       let errorMessage = 'Error al exportar reporte';
       try {
@@ -445,9 +470,16 @@ const InventarioDashboard = () => {
     setProveedorInput('');
     setShowProveedorDropdown(false);
     try {
-      const provsData = await getProveedores({ limit: 99999 }).catch(() => ({ proveedores: [] }));
-      setProveedoresList(provsData.proveedores || []);
-    } catch {
+      // Cargar proveedores con límite alto
+      const provsData = await getProveedores({ limit: 99999 });
+      // Asegurar que los proveedores tengan una propiedad 'nombre' unificada
+      const proveedoresConNombre = (provsData.proveedores || []).map(p => ({
+        ...p,
+        nombre: p.razon_social || p.nombre || 'Sin nombre'
+      }));
+      setProveedoresList(proveedoresConNombre);
+    } catch (error) {
+      console.error('Error cargando proveedores:', error);
       setProveedoresList([]);
     }
     setShowCostoModal(true);
@@ -673,15 +705,15 @@ const InventarioDashboard = () => {
           </div>
           {datosMensuales && datosMensuales.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
-              <ComposedChart data={datosMensuales}>
+              <LineChart data={datosMensuales}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="mes" stroke="#9ca3af" />
                 <YAxis stroke="#9ca3af" />
                 <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }} />
                 <Legend wrapperStyle={{ color: '#e5e7eb', fontSize: '10px' }} />
-                <Bar dataKey="entradas" fill="#8b5cf6" name="Entradas" />
-                <Bar dataKey="salidas" fill="#f43f5e" name="Salidas" />
-              </ComposedChart>
+                <Line type="monotone" dataKey="entradas" stroke="#8b5cf6" name="Entradas" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="salidas" stroke="#f43f5e" name="Salidas" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
             </ResponsiveContainer>
           ) : (
             <div className="h-[200px] flex items-center justify-center text-gray-400 text-sm">
@@ -1214,7 +1246,7 @@ const InventarioDashboard = () => {
             <div className="space-y-3 mb-4">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-gray-400" />
-                <label className="text-sm text-gray-300">Rango de fechas (para Kardex y Rentabilidad):</label>
+                <label className="text-sm text-gray-300">Rango de fechas (para Kardex, Rentabilidad y Entradas-Salidas):</label>
               </div>
               <div className="flex gap-2">
                 <input
@@ -1236,6 +1268,12 @@ const InventarioDashboard = () => {
               <button onClick={() => handleExportarReporte('rentabilidad')} className="w-full text-left px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 transition">📈 Rentabilidad por Producto</button>
               <button onClick={() => handleExportarReporte('toma-fisica')} className="w-full text-left px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 transition">📄 Hoja de Toma Física</button>
               <button onClick={() => handleExportarReporte('lento-movimiento')} className="w-full text-left px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 transition">🐌 Mercancía de Lento Movimiento</button>
+              <button
+                onClick={() => handleExportarReporte('movimientos-producto')}
+                className="w-full text-left px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 transition flex items-center gap-2"
+              >
+                <Box size={18} /> Entradas/Salidas por Producto (detallado)
+              </button>
               <button onClick={() => handleExportarReporte('valoracion')} className="w-full text-left px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 transition">💰 Valoración de Inventario</button>
               <button
                 onClick={() => handleExportarReporte('top-cambios-precio')}
@@ -1472,6 +1510,7 @@ const InventarioDashboard = () => {
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Fecha</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Documento</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Ref</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Tipo</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Cantidad</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Saldo</th>
@@ -1486,6 +1525,7 @@ const InventarioDashboard = () => {
                       <tr key={i} className="hover:bg-gray-700/50">
                         <td className="px-4 py-2 text-gray-300">{new Date(m.created_at).toLocaleDateString()}</td>
                         <td className="px-4 py-2 text-gray-300">{m.referencia_tipo}</td>
+                        <td className="px-4 py-2 text-gray-300">{m.numero_documento || m.referencia_tipo}</td>
                         <td className="px-4 py-2">
                           <span className={`px-2 py-1 text-xs rounded ${m.tipo_movimiento === 'Entrada' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
                             {m.tipo_movimiento}

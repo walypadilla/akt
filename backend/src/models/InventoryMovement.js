@@ -2,16 +2,24 @@
 const { pool } = require('../config/db');
 
 class InventoryMovement {
+  
   static async findAll(organizacion_id, filters = {}) {
     let sql = `
-      SELECT m.*, p.nombre AS producto_nombre, b.nombre AS bodega_nombre,
-             u.nombre AS usuario_nombre
-      FROM movimientos_inventario m
-      JOIN productos p ON m.producto_id = p.id
-      LEFT JOIN bodegas b ON m.bodega_id = b.id
-      JOIN usuarios u ON m.usuario_id = u.id
-      WHERE m.organizacion_id = ?
-    `;
+    SELECT m.*, 
+           p.nombre AS producto_nombre, 
+           b.nombre AS bodega_nombre,
+           u.nombre AS usuario_nombre,
+           CASE 
+             WHEN m.referencia_tipo = 'Compra' THEN (SELECT numero_comprobante FROM compras_gastos WHERE id = m.referencia_id)
+             WHEN m.referencia_tipo = 'Factura' THEN (SELECT numero_correlativo FROM facturas WHERE id = m.referencia_id)
+             ELSE NULL
+           END AS numero_documento
+    FROM movimientos_inventario m
+    JOIN productos p ON m.producto_id = p.id
+    LEFT JOIN bodegas b ON m.bodega_id = b.id
+    JOIN usuarios u ON m.usuario_id = u.id
+    WHERE m.organizacion_id = ?
+  `;
     const params = [organizacion_id];
 
     if (filters.producto_id) {
@@ -51,7 +59,14 @@ class InventoryMovement {
 
   static async getKardex(producto_id, organizacion_id, fecha_inicio, fecha_fin) {
     let sql = `
-      SELECT m.*, b.nombre AS bodega_nombre, u.nombre AS usuario_nombre
+      SELECT m.*, 
+            b.nombre AS bodega_nombre, 
+            u.nombre AS usuario_nombre,
+            CASE 
+              WHEN m.referencia_tipo = 'Compra' THEN (SELECT numero_comprobante FROM compras_gastos WHERE id = m.referencia_id)
+              WHEN m.referencia_tipo = 'Factura' THEN (SELECT numero_correlativo FROM facturas WHERE id = m.referencia_id)
+              ELSE NULL
+            END AS numero_documento
       FROM movimientos_inventario m
       LEFT JOIN bodegas b ON m.bodega_id = b.id
       JOIN usuarios u ON m.usuario_id = u.id
@@ -63,24 +78,26 @@ class InventoryMovement {
     return rows;
   }
 
-  static async create(data) {
+  static async create(data, connection = null) {
+    const db = connection || pool;
     const {
       organizacion_id, producto_id, bodega_id, tipo_movimiento,
       cantidad, stock_anterior, stock_nuevo, referencia_tipo,
       referencia_id, costo_unitario, observacion, usuario_id
     } = data;
-    const [result] = await pool.query(
+    const [result] = await db.query(
       `INSERT INTO movimientos_inventario 
-       (organizacion_id, producto_id, bodega_id, tipo_movimiento, cantidad,
+      (organizacion_id, producto_id, bodega_id, tipo_movimiento, cantidad,
         stock_anterior, stock_nuevo, referencia_tipo, referencia_id,
         costo_unitario, observacion, usuario_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [organizacion_id, producto_id, bodega_id, tipo_movimiento, cantidad,
-       stock_anterior, stock_nuevo, referencia_tipo, referencia_id,
-       costo_unitario, observacion, usuario_id]
+      stock_anterior, stock_nuevo, referencia_tipo, referencia_id,
+      costo_unitario, observacion, usuario_id]
     );
     return result.insertId;
   }
+
 }
 
 module.exports = InventoryMovement;

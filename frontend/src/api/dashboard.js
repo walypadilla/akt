@@ -10,6 +10,15 @@ export const getSuperAdminDashboard = async (periodo = 'mes', anio = null, mes =
   return response.data;
 };
 
+export const getConsumoGlobal = async (anio) => {
+  const response = await apiClient.get(`/superadmin/consumo-global?anio=${anio}`);
+  return response.data;
+};
+
+export const getPlanes = async () => {
+  const response = await apiClient.get('/superadmin/planes');
+  return response.data;
+};
 
 export const getOrganizationMonthlyData = async () => {
   const response = await apiClient.get('/organization-dashboard/monthly');
