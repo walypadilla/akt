@@ -13,8 +13,13 @@ const inventoryController = require('../controllers/inventoryController');
 const productoController = require('../controllers/productoController');
 const organizationDashboardController = require('../controllers/organizationDashboardController');
 
+// Importar las rutas de clínica
+const clinicaRoutes = require('./clinicaRoutes');
+
 const router = express.Router();
 router.use(authMiddleware);
+
+
 // --------------------------------------------
 router.get('/mi-organizacion', organizationDashboardController.obtenerMiOrganizacion);
 router.get('/mi-consumo', organizationDashboardController.obtenerMiConsumo);
@@ -89,6 +94,7 @@ router.get('/proveedores/:id/pdf', proveedorController.generarProveedorPDF);
 
 // ========== CLIENTES ==========
 router.get('/clientes', clienteController.obtenerClientes);
+router.get('/clientes/anios', clienteController.getAniosDisponibles);
 router.get('/clientes/:id', clienteController.obtenerClientePorId);
 router.post('/clientes', clienteController.crearCliente);
 router.put('/clientes/:id', clienteController.actualizarCliente);
@@ -102,8 +108,7 @@ router.get('/clientes/grafica/por-mes', clienteController.getClientesPorMes);
 router.get('/clientes/grafica/top', clienteController.getTopClientes);
 router.get('/clientes/grafica/por-mes/exportar', clienteController.exportarGraficaClientesPorMes);
 router.get('/clientes/grafica/top/exportar', clienteController.exportarTopClientes);
-// Años disponibles
-router.get('/clientes/anios', clienteController.getAniosDisponibles);
+
 
 // ============================================================
 // INVENTARIO
@@ -256,6 +261,9 @@ router.post('/facturas/:id/enviar-mh', facturaController.enviarFacturaMH);
 router.post('/facturas/:id/email-con-adjuntos', facturaController.enviarFacturaConAdjuntos);
 router.get('/facturas/exportar/cierre-mes', facturaController.exportarCierreMes);
 
-
+// ============================================================
+// RUTAS DE CLÍNICA (Citas, Pacientes, Consultas, etc.)
+// ============================================================
+router.use(clinicaRoutes);
 
 module.exports = router;

@@ -35,6 +35,14 @@ import Employees from './pages/organization/Employees';
 import Payroll from './pages/organization/Payroll';
 import Inventario from './pages/organization/InventoryDashboard';
 import DTEMonitor from './pages/organization/DTEMonitor';
+import Citas from './pages/organization/Citas';
+import Pacientes from './pages/organization/Pacientes';
+import Consultas from './pages/organization/Consultas';
+import Examenes from './pages/organization/Examenes';
+import Odontograma from './pages/organization/Odontograma';
+import Vacunas from './pages/organization/Vacunas';
+import ControlPeso from './pages/organization/ControlPeso';
+import Medicos from './pages/organization/Medicos';
 
 // Wrappers
 import FacturasPorOrganizacionWrapper from './components/wrappers/FacturasPorOrganizacionWrapper';
@@ -111,6 +119,14 @@ function App() {
 								<Route path='/proveedores' element={<Proveedores />} />
 								<Route path='/empleados' element={<Employees />} />
 								<Route path='/planillas' element={<Payroll />} />
+								<Route path="/citas" element={<Citas />} />
+								<Route path="/pacientes" element={<Pacientes />} />
+								<Route path="/consultas" element={<Consultas />} />
+								<Route path="/examenes" element={<Examenes />} />
+								<Route path="/medicos" element={<Medicos />} />
+								<Route path="/odontograma" element={<Odontograma />} />
+								<Route path="/vacunas" element={<Vacunas />} />
+								<Route path="/peso" element={<ControlPeso />} />
 							</Route>
 						</Route>
 

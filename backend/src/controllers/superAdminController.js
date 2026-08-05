@@ -33,6 +33,25 @@ function normalizarTelefono(numero) {
   return limpio;
 }
 
+// ==========================================
+// FUNCIÓN AUXILIAR: Normalizar Tipo de Organización
+// ==========================================
+function normalizarTipoOrganizacion(tipo) {
+  if (!tipo) return 'Empresa Comercial';
+  
+  // Quita tildes/acentos, convierte a minúsculas para comparar y limpia espacios
+  const limpio = tipo.toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  
+  const mapaTipos = {
+    'empresa comercial': 'Empresa Comercial',
+    'clinica general': 'Clinica General',
+    'clinica dental': 'Clinica Dental',
+    'clinica veterinaria': 'Clinica Veterinaria'
+  };
+
+  return mapaTipos[limpio] || 'Empresa Comercial';
+}
+
 // ============================================================
 // 1. ORGANIZACIONES
 // ============================================================
@@ -105,6 +124,8 @@ exports.crearOrganizacion = async (req, res) => {
       // Guardamos la ruta relativa para poder servirla después
       logoUrlFinal = `/uploads/logos/${req.file.filename}`;
     }
+
+    const tipoOrg = normalizarTipoOrganizacion(tipo_organizacion);
 
     // Normalizar teléfonos
     const telefonoNormalizado = telefono ? normalizarTelefono(telefono) : '';
@@ -184,7 +205,7 @@ exports.crearOrganizacion = async (req, res) => {
         nit.trim(),
         nrc ? nrc.trim() : '',
         tipo_contribuyente,
-        tipo_organizacion || 'Empresa Comercial',
+        tipoOrg,
         ambienteDB,
         token_mh || null,
         llave_privada_p12 || null,
@@ -251,6 +272,8 @@ exports.actualizarOrganizacion = async (req, res) => {
       limite_facturas,
       limite_whatsapp,
     } = req.body;
+
+    const tipoOrg = normalizarTipoOrganizacion(tipo_organizacion);
 
     // Verificar si Multer atrapó un archivo en req.file
     let logoUrlFinal = logo_url ? logo_url.trim() : '';
@@ -328,7 +351,7 @@ exports.actualizarOrganizacion = async (req, res) => {
         nit ? nit.trim() : '',
         nrc ? nrc.trim() : '',
         tipo_contribuyente || 'Pequeño',
-        tipo_organizacion || 'Empresa Comercial',
+        tipoOrg,
         ambienteDB,
         token_mh || null,
         llave_privada_p12 || null,
@@ -357,7 +380,7 @@ exports.actualizarOrganizacion = async (req, res) => {
 
 exports.cambiarEstadoOrganizacion = async (req, res) => {
   const { organizacion_id } = req.params;
-  const { estado } = req.body; // 'Activo' o 'Inactivo'
+  const { estado } = req.body; 
 
   try {
     // 1. Actualizar el estado de la organización

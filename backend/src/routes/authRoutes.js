@@ -19,35 +19,48 @@ router.post('/login', async (req, res) => {
     }
 
     let organizacionData = null;
-    
-    // Si no es SUPER_ADMIN, obtener datos de la organización
+
+    // Si no es SUPER_ADMIN, obtener datos de la organización (incluyendo tipo_organizacion y otros)
     if (user.rol !== 'SUPER_ADMIN' && user.organizacion_id) {
       const [orgRows] = await pool.query(
         `SELECT id, nombre_empresa, nombre_comercial, nit, nrc, 
                 direccion, telefono, telefono_whatsapp, correo_contacto, 
-                tipo_contribuyente, ambiente, logo_url, estado
+                tipo_contribuyente, ambiente, logo_url, estado,
+                tipo_organizacion, id_departamento, id_municipio, 
+                direccion_linea, codigo_giro, whatsapp_activado,
+                plan_id, limite_facturas, limite_whatsapp
          FROM organizaciones WHERE id = ?`,
         [user.organizacion_id]
       );
-      
+
       if (orgRows.length === 0 || orgRows[0].estado !== 'Activo') {
         return res.status(403).json({ message: 'Organización inactiva' });
       }
-      
+
+      const org = orgRows[0];
       organizacionData = {
-        id: orgRows[0].id,
-        nombre_empresa: orgRows[0].nombre_empresa,
-        nombre_comercial: orgRows[0].nombre_comercial,
-        nit: orgRows[0].nit,
-        nrc: orgRows[0].nrc,
-        direccion: orgRows[0].direccion,
-        telefono: orgRows[0].telefono,
-        telefono_whatsapp: orgRows[0].telefono_whatsapp,
-        correo_contacto: orgRows[0].correo_contacto,
-        tipo_contribuyente: orgRows[0].tipo_contribuyente,
-        ambiente: orgRows[0].ambiente,
-        logo_url: orgRows[0].logo_url,
-        estado: orgRows[0].estado,
+        id: org.id,
+        nombre_empresa: org.nombre_empresa,
+        nombre_comercial: org.nombre_comercial,
+        nit: org.nit,
+        nrc: org.nrc,
+        direccion: org.direccion,
+        telefono: org.telefono,
+        telefono_whatsapp: org.telefono_whatsapp,
+        correo_contacto: org.correo_contacto,
+        tipo_contribuyente: org.tipo_contribuyente,
+        ambiente: org.ambiente,
+        logo_url: org.logo_url,
+        estado: org.estado,
+        tipo_organizacion: org.tipo_organizacion,
+        id_departamento: org.id_departamento,
+        id_municipio: org.id_municipio,
+        direccion_linea: org.direccion_linea,
+        codigo_giro: org.codigo_giro,
+        whatsapp_activado: org.whatsapp_activado,
+        plan_id: org.plan_id,
+        limite_facturas: org.limite_facturas,
+        limite_whatsapp: org.limite_whatsapp,
       };
     }
 
@@ -71,9 +84,8 @@ router.post('/login', async (req, res) => {
         es_temporal: esTemporal,
       },
       mensaje: esTemporal ? 'Contraseña temporal. Debe cambiarla.' : undefined
-      
     });
-    
+
   } catch (error) {
     console.error('❌ [login] Error:', error);
     res.status(500).json({ message: 'Error en login', error: error.message });

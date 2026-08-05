@@ -14,11 +14,17 @@ import {
   CreditCard,
   DollarSign,
   Package,
-  XCircle
+  XCircle,
+  Calendar, Clipboard, Activity, Syringe, TrendingUp
 } from 'lucide-react';
+
 import { useAuth } from '../../hooks/useAuth';
 
-// Paleta de colores de alto contraste: viva, sin grises aburridos y sin repetir colores cercanos
+const normalizarTexto = (texto) => {
+  if (!texto) return '';
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+};
+
 const linkStylesMap = {
   // --- SUPERADMIN LINKS ---
   'Dashboard': {
@@ -110,17 +116,21 @@ const Sidebar = () => {
 
   // 2. Buscar logo en todas las ubicaciones posibles del objeto user
   const rawLogoUrl = user?.logo_url || user?.organizacion?.logo_url || user?.organizacion_logo;
-
-  // 3. Ajustado a puerto 5000 (estándar Express/Node) por si VITE_API_URL no está definido
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-  
-  // Si la URL ya trae http (ej. Cloudinary/S3) la dejamos intacta; si empieza con "/", le agregamos el host del backend
   const fullLogoUrl = rawLogoUrl?.startsWith('http') 
     ? rawLogoUrl 
     : (rawLogoUrl?.startsWith('/') ? `${API_URL}${rawLogoUrl}` : rawLogoUrl);
 
   // 4. Nombre para mostrar si no hay logo o falla al cargar
   const nombreEmpresa = user?.nombre_empresa || user?.organizacion_nombre || user?.organizacion?.nombre_empresa || 'SaaS Facturación';
+
+  const tipoOrg = user?.organizacion?.tipo_organizacion || 'Empresa Comercial';
+  const tipoNormalizado = normalizarTexto(tipoOrg);
+
+  const esClinicaGeneral = tipoNormalizado === 'clinica general';
+  const esClinicaDental = tipoNormalizado === 'clinica dental';
+  const esClinicaVeterinaria = tipoNormalizado === 'clinica veterinaria';
+  const isClinica = esClinicaGeneral || esClinicaDental || esClinicaVeterinaria;
 
   const superAdminLinks = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -146,6 +156,24 @@ const Sidebar = () => {
     { to: '/empleados', icon: Briefcase, label: 'Empleados' },
     { to: '/planillas', icon: CreditCard, label: 'Planillas' },
   ];
+
+  if (isClinica) {
+    organizationLinks.push(
+      { to: '/medicos', icon: Users, label: 'Médicos' },
+      { to: '/citas', icon: Calendar, label: 'Citas' },
+      { to: '/pacientes', icon: Users, label: 'Pacientes' },
+      { to: '/consultas', icon: Clipboard, label: 'Consultas' },
+      { to: '/examenes', icon: Activity, label: 'Exámenes' }
+    );
+
+    if (esClinicaDental) {
+      organizationLinks.push({ to: '/odontograma', icon: Activity, label: 'Odontograma' });
+    }
+    if (esClinicaVeterinaria) {
+      organizationLinks.push({ to: '/vacunas', icon: Syringe, label: 'Vacunas' });
+      organizationLinks.push({ to: '/peso', icon: TrendingUp, label: 'Control de Peso' });
+    }
+  }
 
   const links = isSuperAdmin ? superAdminLinks : organizationLinks;
 

@@ -304,7 +304,9 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
 
         {/* Tipo Organización */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Tipo Organización</label>
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Tipo de Organización *
+          </label>
           <select
             name="tipo_organizacion"
             value={formData.tipo_organizacion}
@@ -312,9 +314,9 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
           >
             <option value="Empresa Comercial">Empresa Comercial</option>
-            <option value="Clínica General">Clínica General</option>
-            <option value="Clínica Dental">Clínica Dental</option>
-            <option value="Clinica Veterinaria">Clinica Veterinaria</option>
+            <option value="Clinica General">Clínica General</option>
+            <option value="Clinica Dental">Clínica Dental</option>
+            <option value="Clinica Veterinaria">Clínica Veterinaria</option>
           </select>
         </div>
 
