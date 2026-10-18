@@ -34,4 +34,27 @@ const upload = multer({
   limits: { fileSize: 2 * 1024 * 1024 } // 2MB
 });
 
-module.exports = upload;
+// Storage para exámenes
+const storageExamenes = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, 'uploads/examenes');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `examen_${req.params.id}_${Date.now()}${ext}`);
+  },
+});
+
+const uploadExamen = multer({
+  storage: storageExamenes,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (allowed.includes(file.mimetype)) return cb(null, true);
+    cb(new Error('Tipo de archivo no permitido. Solo JPG, PNG o PDF (máx. 2MB)'));
+  },
+});
+
+module.exports = {upload, uploadExamen};

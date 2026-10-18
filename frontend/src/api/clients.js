@@ -1,5 +1,10 @@
 import apiClient from './config';
 
+export const getAniosDisponiblesClientes = async () => {
+  const response = await apiClient.get('/organization/clientes/anios');
+  return response.data;
+};
+
 export const getClients = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
   const response = await apiClient.get(`/organization/clientes?${query}`);
@@ -44,11 +49,6 @@ export const exportarClientesFiltrados = async (params = {}) => {
     responseType: 'blob',
   });
   return new Blob(['\ufeff', response.data], { type: 'text/csv;charset=utf-8;' });
-};
-
-export const getAniosDisponiblesClientes = async () => {
-  const response = await apiClient.get('/organization/clientes/anios');
-  return response.data;
 };
 
 export const generarClientePDF = async (id) => {

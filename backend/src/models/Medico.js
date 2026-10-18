@@ -12,7 +12,7 @@ class Medico {
 
   static async findById(id, organizacion_id) {
     const [rows] = await pool.query(
-      `SELECT m.*, u.nombre, u.correo, u.telefono
+      `SELECT m.*, u.nombre, u.correo
        FROM medicos m
        JOIN usuarios u ON m.usuario_id = u.id
        WHERE m.id = ? AND m.organizacion_id = ?`,
@@ -122,10 +122,49 @@ class Medico {
       SELECT 
         c.id AS consulta_id,
         c.fecha_consulta,
-        c.motivo,
-        c.diagnostico,
+        c.subjetivo,
+        c.objetivo,
+        c.analisis,
+        c.plan,
+        c.presion_arterial,
+        c.frecuencia_cardiaca,
+        c.temperatura,
+        c.peso AS peso_consulta,
+        c.talla,
+        c.imc,
+        c.diagnostico_texto AS diagnostico,
+        c.diagnostico_codigo,
+        c.receta,
         c.factura_id,
+        -- Datos del paciente (comunes)
+        p.id AS paciente_id,
         p.nombre AS paciente_nombre,
+        p.apellidos AS paciente_apellidos,
+        p.fecha_nacimiento AS paciente_fecha_nacimiento,
+        p.genero AS paciente_genero,
+        p.dui AS paciente_dui,
+        p.grupo_sanguineo AS paciente_grupo_sanguineo,
+        p.enfermedades_cronicas AS paciente_enfermedades_cronicas,
+        p.alergias AS paciente_alergias,
+        p.contacto_emergencia AS paciente_contacto_emergencia,
+        p.codigo_expediente AS paciente_codigo_expediente,
+        -- Datos veterinaria
+        p.especie AS paciente_especie,
+        p.raza AS paciente_raza,
+        p.color AS paciente_color,
+        p.peso AS paciente_peso,
+        p.chip AS paciente_chip,
+        p.estado_reproductivo AS paciente_estado_reproductivo,
+        p.tipo_alimentacion AS paciente_tipo_alimentacion,
+        p.habitat AS paciente_habitat,
+        p.senas_particulares AS paciente_senas_particulares,
+        -- Datos dental
+        p.tipo_denticion AS paciente_tipo_denticion,
+        p.habitos_bucales AS paciente_habitos_bucales,
+        p.sensibilidad_dental AS paciente_sensibilidad_dental,
+        p.ortodoncia_previa AS paciente_ortodoncia_previa,
+        p.ultima_visita_dentista AS paciente_ultima_visita_dentista,
+        -- Datos factura
         f.numero_correlativo AS factura_numero,
         f.total_pagar AS factura_total,
         f.estado AS factura_estado,
@@ -135,7 +174,7 @@ class Medico {
       LEFT JOIN facturas f ON c.factura_id = f.id AND f.organizacion_id = ?
       WHERE c.medico_id = ? AND c.organizacion_id = ?
     `;
-    
+
     const params = [organizacion_id, medico_id, organizacion_id];
 
     if (anio) {

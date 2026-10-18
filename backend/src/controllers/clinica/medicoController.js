@@ -59,15 +59,18 @@ exports.crear = async (req, res) => {
     const { usuario_id, especialidad, numero_licencia } = req.body;
 
     if (!usuario_id) {
-      return res.status(400).json({ message: 'El usuario_id es obligatorio' });
+      return res.status(400).json({ message: 'Debe seleccionar un usuario' });
+    }
+    if (!especialidad) {
+      return res.status(400).json({ message: 'La especialidad es obligatoria' });
     }
 
     const usuario = await Usuario.findById(usuario_id);
-    if (!usuario) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (!usuario || usuario.organizacion_id !== organizacion_id) {
+      return res.status(404).json({ message: 'Usuario no encontrado en esta organización' });
     }
-    if (usuario.organizacion_id !== organizacion_id) {
-      return res.status(403).json({ message: 'El usuario no pertenece a esta organización' });
+    if (usuario.rol !== 'Medico') {
+      return res.status(400).json({ message: 'El usuario no tiene rol de Médico' });
     }
 
     const existente = await Medico.findByUsuarioId(usuario_id, organizacion_id);
@@ -79,7 +82,7 @@ exports.crear = async (req, res) => {
       organizacion_id,
       usuario_id,
       especialidad,
-      numero_licencia
+      numero_licencia,
     });
 
     res.status(201).json({ message: 'Médico creado', id });
@@ -97,14 +100,14 @@ exports.actualizar = async (req, res) => {
   try {
     const { id } = req.params;
     const organizacion_id = req.organizacion_id;
-    const data = req.body;
+    const { especialidad, numero_licencia } = req.body;
 
     const medico = await Medico.findById(id, organizacion_id);
     if (!medico) {
       return res.status(404).json({ message: 'Médico no encontrado' });
     }
 
-    await Medico.update(id, organizacion_id, data);
+    await Medico.update(id, organizacion_id, { especialidad, numero_licencia });
     res.json({ message: 'Médico actualizado' });
   } catch (error) {
     console.error('Error al actualizar médico:', error);
@@ -212,9 +215,11 @@ exports.exportarTodos = async (req, res) => {
 exports.exportarFiltrados = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
-    const { search, activo } = req.query;
+    const { search, activo, anio, mes } = req.query;
 
-    const medicos = await Medico.findAll(organizacion_id, false);
+    const anioFiltro = anio ? parseInt(anio) : new Date().getFullYear();
+    const mesFiltro = mes ? parseInt(mes) : null;
+    const medicos = await Medico.findAllWithStats(organizacion_id, anioFiltro, mesFiltro, false);
 
     let filtered = medicos;
     if (search) {
@@ -393,5 +398,32 @@ exports.getAniosDisponibles = async (req, res) => {
   } catch (error) {
     console.error('Error al obtener años disponibles:', error);
     res.status(500).json({ message: 'Error al obtener años' });
+  }
+};
+
+/**
+ * Usuarios con rol "Medico" que aún no tienen registro en `medicos`.
+ * GET /organization/medicos/usuarios-disponibles
+ */
+exports.getMedicosDisponibles = async (req, res) => {
+  try {
+    const organizacion_id = req.organizacion_id;
+    const [rows] = await pool.query(
+      `SELECT u.id, u.nombre, u.correo
+       FROM usuarios u
+       WHERE u.organizacion_id = ?
+         AND u.estado = 1
+         AND u.rol = 'Medico'
+         AND u.id NOT IN (
+           SELECT usuario_id FROM medicos
+           WHERE organizacion_id = ? AND estado = 1
+         )
+       ORDER BY u.nombre ASC`,
+      [organizacion_id, organizacion_id]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('Error al obtener usuarios disponibles:', error);
+    res.status(500).json({ message: 'Error al obtener usuarios disponibles' });
   }
 };

@@ -52,4 +52,15 @@ const isSuperAdmin = (req, res, next) => {
     next();
 };
 
-module.exports = { authMiddleware, isSuperAdmin };
+const requireRole = (...rolesPermitidos) => {
+  return (req, res, next) => {
+    if (!rolesPermitidos.includes(req.rol)) {
+      return res.status(403).json({ 
+        message: 'Acceso denegado: no tiene permisos para esta acción' 
+      });
+    }
+    next();
+  };
+};
+
+module.exports = { authMiddleware, isSuperAdmin, requireRole };

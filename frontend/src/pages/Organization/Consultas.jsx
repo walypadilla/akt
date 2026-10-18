@@ -1,8 +1,8 @@
 // frontend/src/pages/organization/Consultas.jsx
-import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Clipboard, Search, Plus, Edit2, Trash2, Eye, X, Download, Filter,
-  Printer, FileText, Calendar, Clock, User, Activity, DollarSign
+  Clipboard, Search, Plus, Edit2, Eye, X, Download, Filter,
+  Printer, FileText, CheckCircle, Clock, DollarSign, Calendar, Hash, User, Activity, AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import {
@@ -12,23 +12,30 @@ import {
   getConsulta,
   facturarConsulta,
   exportarConsultas,
-  exportarConsultasFiltrados
+  exportarConsultasFiltrados,
+  getPacientes,
+  getMedicos,
+  getAniosConsultas,
+  getExamenesInternosConsulta,
+  getVacunasAplicadasConsulta,
 } from '../../api/clinica';
-import { getPacientes } from '../../api/clinica';
-import { getMedicos } from '../../api/clinica';
 import { getProductos } from '../../api/productos';
 import ConsultaForm from '../../components/forms/clinica/ConsultaForm';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import ErrorMessage from '../../components/common/ErrorMessage';
 import { toast } from 'react-toastify';
 import { getTodayLocal } from '../../utils/dateUtils';
 
-// ============================================================
-// COMPONENTE PRINCIPAL
-// ============================================================
+const MESES = [
+  'Enero','Febrero','Marzo','Abril','Mayo','Junio',
+  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre',
+];
+
 const Consultas = () => {
   const { user } = useAuth();
   const tipoOrg = user?.organizacion?.tipo_organizacion || 'Empresa Comercial';
+  const hoy = new Date();
 
   const normalizarTexto = (texto) => {
     if (!texto) return '';
@@ -37,15 +44,6 @@ const Consultas = () => {
   const tipoNormalizado = normalizarTexto(tipoOrg);
   const isClinica = ['clinica general', 'clinica dental', 'clinica veterinaria'].includes(tipoNormalizado);
 
-  if (!isClinica) {
-    return (
-      <div className="p-6 text-center text-gray-400">
-        <Clipboard className="w-12 h-12 mx-auto text-gray-600 mb-2" />
-        <p className="text-lg font-semibold">Esta función solo está disponible para clínicas.</p>
-      </div>
-    );
-  }
-
   // Estados principales
   const [consultas, setConsultas] = useState([]);
   const [pacientes, setPacientes] = useState([]);
@@ -53,22 +51,19 @@ const Consultas = () => {
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [paginacion, setPaginacion] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
   const tableRef = useRef(null);
-  const [scrollPosition, setScrollPosition] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Filtros
+  // Filtros con año/mes (por defecto mes actual)
+  const [anio, setAnio] = useState(hoy.getFullYear());
+  const [mes, setMes] = useState(hoy.getMonth() + 1);
+  const [aniosDisponibles, setAniosDisponibles] = useState([hoy.getFullYear()]);
+  const [busqueda, setBusqueda] = useState('');
+
   const [filtros, setFiltros] = useState({
-    search: '',
     paciente_id: '',
     medico_id: '',
-    fecha_inicio: '',
-    fecha_fin: '',
-    page: 1,
-    limit: 10,
   });
-  const [filtrosTemp, setFiltrosTemp] = useState({ ...filtros });
 
   // Modales
   const [showForm, setShowForm] = useState(false);
@@ -85,17 +80,18 @@ const Consultas = () => {
   });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
 
-  // Cargar datos
+  // ============ CARGA DE DATOS ============
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = { ...filtros };
-      if (!params.search) delete params.search;
-      if (!params.paciente_id) delete params.paciente_id;
-      if (!params.medico_id) delete params.medico_id;
-      if (!params.fecha_inicio) delete params.fecha_inicio;
-      if (!params.fecha_fin) delete params.fecha_fin;
+      const params = {
+        anio,
+        mes,
+      };
+      if (busqueda) params.search = busqueda;
+      if (filtros.paciente_id) params.paciente_id = filtros.paciente_id;
+      if (filtros.medico_id) params.medico_id = filtros.medico_id;
 
       const [consultasData, pacientesData, medicosData, productosData] = await Promise.all([
         getConsultas(params),
@@ -104,13 +100,7 @@ const Consultas = () => {
         getProductos({ limit: 99999 }),
       ]);
 
-      setConsultas(consultasData.consultas || consultasData || []);
-      setPaginacion({
-        total: consultasData.total || 0,
-        page: consultasData.page || 1,
-        limit: consultasData.limit || 10,
-        totalPages: consultasData.totalPages || 1,
-      });
+      setConsultas(Array.isArray(consultasData) ? consultasData : consultasData.consultas || []);
       setPacientes(pacientesData.pacientes || pacientesData || []);
       setMedicos(medicosData || []);
       setProductos(productosData.productos || productosData || []);
@@ -121,74 +111,34 @@ const Consultas = () => {
     } finally {
       setLoading(false);
     }
-  }, [filtros]);
+  }, [anio, mes, busqueda, filtros.paciente_id, filtros.medico_id]);
 
   useEffect(() => {
     loadData();
-  }, [
-    filtros.page,
-    filtros.search,
-    filtros.paciente_id,
-    filtros.medico_id,
-    filtros.fecha_inicio,
-    filtros.fecha_fin,
-  ]);
+  }, [loadData]);
 
-  // Scroll restoration
-  useLayoutEffect(() => {
-    if (!loading && tableRef.current && scrollPosition > 0) {
-      setTimeout(() => {
-        if (tableRef.current) {
-          tableRef.current.scrollTop = scrollPosition;
+  // Cargar años disponibles una vez
+  useEffect(() => {
+    const cargarAnios = async () => {
+      try {
+        const data = await getAniosConsultas();
+        if (Array.isArray(data) && data.length > 0) {
+          setAniosDisponibles(data);
         }
-      }, 50);
-    }
-  }, [loading, consultas, scrollPosition]);
-
-  // Filtros
-  const aplicarFiltros = () => {
-    if (tableRef.current) {
-      setScrollPosition(tableRef.current.scrollTop);
-    }
-    setFiltros({ ...filtrosTemp, page: 1 });
-    setShowFilters(false);
-  };
-
-  const cancelarFiltros = () => {
-    setFiltrosTemp({ ...filtros });
-    setShowFilters(false);
-  };
-
-  const limpiarFiltros = () => {
-    const filtrosLimpios = {
-      search: '',
-      paciente_id: '',
-      medico_id: '',
-      fecha_inicio: '',
-      fecha_fin: '',
-      page: 1,
-      limit: 10,
+      } catch (err) {
+        console.error('Error al cargar años:', err);
+      }
     };
-    setFiltros(filtrosLimpios);
-    setFiltrosTemp(filtrosLimpios);
-    if (tableRef.current) {
-      tableRef.current.scrollTop = 0;
-      setScrollPosition(0);
-    }
+    cargarAnios();
+  }, []);
+
+  const volverMesActual = () => {
+    setAnio(hoy.getFullYear());
+    setMes(hoy.getMonth() + 1);
+    setBusqueda('');
   };
 
-  const handleSearchKeyDown = (e) => {
-    if (e.key === 'Enter') aplicarFiltros();
-  };
-
-  const goToPage = (page) => {
-    if (tableRef.current) {
-      setScrollPosition(tableRef.current.scrollTop);
-    }
-    setFiltros({ ...filtros, page });
-  };
-
-  // CRUD
+  // ============ CRUD ============
   const handleSubmit = async (data) => {
     setSaving(true);
     try {
@@ -219,23 +169,56 @@ const Consultas = () => {
       const data = await getConsulta(id);
       setSelectedConsulta(data);
       setShowDetail(true);
-    } catch (error) {
+    } catch {
       toast.error('Error al cargar detalle');
     }
   };
 
   const handleFacturar = async (consultaId) => {
     try {
-      const consulta = await getConsulta(consultaId);
+      // Cargar consulta, exámenes y vacunas en paralelo
+      const [consulta, examenesInternos, vacunasAplicadas] = await Promise.all([
+        getConsulta(consultaId),
+        getExamenesInternosConsulta(consultaId).catch(() => []),
+        getVacunasAplicadasConsulta(consultaId).catch(() => []),
+      ]);
+
       setSelectedConsulta(consulta);
+
+      // Servicios sugeridos por exámenes internos
+      const serviciosExamenes = (examenesInternos || []).map((ex) => ({
+        producto_id: ex.producto_id,
+        cantidad: 1,
+        precio_unitario: parseFloat(ex.precio || 0),
+        tipo_venta: 'Gravado',
+        _esExamen: true,
+        _examenNombre: ex.examen_nombre,
+      }));
+
+      // Servicios sugeridos por vacunas aplicadas
+      const serviciosVacunas = (vacunasAplicadas || []).map((v) => ({
+        producto_id: v.producto_id,
+        cantidad: 1,
+        precio_unitario: parseFloat(v.precio_unitario || 0),
+        tipo_venta: 'Gravado',
+        _esVacuna: true,
+        _vacunaNombre: v.vacuna_nombre,
+        _lote: v.lote,
+      }));
+
+      const serviciosSugeridos = [...serviciosExamenes, ...serviciosVacunas];
+
       setFacturaData({
-        servicios: [{ producto_id: '', cantidad: 1, precio_unitario: 0, tipo_venta: 'Gravado' }],
+        servicios: serviciosSugeridos.length > 0
+          ? serviciosSugeridos
+          : [{ producto_id: '', cantidad: 1, precio_unitario: 0, tipo_venta: 'Gravado' }],
         tipo_documento: 'FAF',
         estado: 'Emitida',
         condicion_operacion: 'Contado',
       });
       setShowFacturar(true);
     } catch (error) {
+      console.error('Error al preparar facturación:', error);
       toast.error('Error al preparar facturación');
     }
   };
@@ -243,17 +226,31 @@ const Consultas = () => {
   const handleFacturarSubmit = async (e) => {
     e.preventDefault();
     try {
-      const serviciosValidos = facturaData.servicios.filter(s => s.producto_id);
+      const serviciosValidos = facturaData.servicios.filter((s) => s.producto_id);
       if (serviciosValidos.length === 0) {
         toast.warning('Agregue al menos un servicio');
         return;
       }
+
+      // Calcular total local para comparación
+      const totalCalculado = serviciosValidos.reduce((acc, s) => {
+        const sub = parseFloat(s.cantidad || 0) * parseFloat(s.precio_unitario || 0);
+        return acc + sub + (s.tipo_venta === 'Gravado' ? sub * 0.13 : 0);
+      }, 0);
+
       const result = await facturarConsulta(selectedConsulta.id, {
         servicios: serviciosValidos,
         tipo_documento: facturaData.tipo_documento,
         estado: facturaData.estado,
         condicion_operacion: facturaData.condicion_operacion,
       });
+
+      if (Math.abs(result.total - totalCalculado) > 0.01) {
+        console.warn(
+          `Diferencia de total: mostrado $${totalCalculado.toFixed(2)} vs backend $${result.total.toFixed(2)}`
+        );
+      }
+
       toast.success(`Factura generada: ${result.numero_correlativo} - $${result.total.toFixed(2)}`);
       setShowFacturar(false);
       loadData();
@@ -279,13 +276,13 @@ const Consultas = () => {
     const nuevos = [...facturaData.servicios];
     nuevos[index][field] = value;
     if (field === 'producto_id') {
-      const prod = productos.find(p => p.id == value);
+      const prod = productos.find((p) => p.id == value);
       nuevos[index].precio_unitario = prod ? parseFloat(prod.precio_unitario) : 0;
     }
     setFacturaData({ ...facturaData, servicios: nuevos });
   };
 
-  // Exportar
+  // ============ EXPORTAR ============
   const handleExportarTodos = async () => {
     try {
       const blob = await exportarConsultas();
@@ -303,9 +300,11 @@ const Consultas = () => {
 
   const handleExportarFiltrados = async () => {
     try {
-      const params = { ...filtros };
-      delete params.page;
-      delete params.limit;
+      const params = { anio, mes };
+      if (busqueda) params.search = busqueda;
+      if (filtros.paciente_id) params.paciente_id = filtros.paciente_id;
+      if (filtros.medico_id) params.medico_id = filtros.medico_id;
+
       const blob = await exportarConsultasFiltrados(params);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -319,79 +318,68 @@ const Consultas = () => {
     }
   };
 
-  // Imprimir receta
   const handleImprimirReceta = (consulta) => {
-    // Esto abrirá una ventana con la receta formateada para imprimir
     if (!consulta.receta) {
       toast.warning('Esta consulta no tiene receta');
       return;
     }
-
     const ventana = window.open('', '_blank', 'width=600,height=800');
     if (!ventana) {
       toast.error('No se pudo abrir la ventana de impresión');
       return;
     }
-
     const fecha = new Date(consulta.fecha_consulta).toLocaleDateString('es-SV');
     const paciente = consulta.paciente_nombre || 'Paciente';
     const medico = consulta.medico_nombre || 'Médico';
 
     ventana.document.write(`
       <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Receta Médica</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 40px; color: #1a1a2e; }
-          .header { text-align: center; border-bottom: 2px solid #8b5cf6; padding-bottom: 20px; margin-bottom: 20px; }
-          .header h1 { color: #8b5cf6; margin: 0; }
-          .header .empresa { font-size: 14px; color: #666; }
-          .info { margin-bottom: 20px; }
-          .info p { margin: 5px 0; }
-          .info .label { font-weight: bold; color: #555; }
-          .receta { background: #f5f5f5; padding: 20px; border-radius: 8px; border-left: 4px solid #8b5cf6; white-space: pre-wrap; min-height: 100px; }
-          .footer { text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 15px; margin-top: 20px; }
-          .firma { margin-top: 30px; text-align: center; }
-          .firma .linea { border-top: 1px solid #333; width: 200px; margin: 20px auto 5px; }
-          @media print { body { margin: 20px; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>📋 RECETA MÉDICA</h1>
-          <div class="empresa">${user?.organizacion?.nombre_empresa || 'Clínica'}</div>
-        </div>
+      <html><head><meta charset="UTF-8"><title>Receta Médica</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 40px; color: #1a1a2e; }
+        .header { text-align: center; border-bottom: 2px solid #8b5cf6; padding-bottom: 20px; margin-bottom: 20px; }
+        .header h1 { color: #8b5cf6; margin: 0; }
+        .header .empresa { font-size: 14px; color: #666; }
+        .info { margin-bottom: 20px; }
+        .info p { margin: 5px 0; }
+        .info .label { font-weight: bold; color: #555; }
+        .receta { background: #f5f5f5; padding: 20px; border-radius: 8px; border-left: 4px solid #8b5cf6; white-space: pre-wrap; min-height: 100px; }
+        .footer { text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 15px; margin-top: 20px; }
+        .firma { margin-top: 30px; text-align: center; }
+        .firma .linea { border-top: 1px solid #333; width: 200px; margin: 20px auto 5px; }
+      </style>
+      </head><body>
+        <div class="header"><h1>📋 RECETA MÉDICA</h1>
+          <div class="empresa">${user?.organizacion?.nombre_empresa || 'Clínica'}</div></div>
         <div class="info">
+          <p><span class="label">SKU:</span> ${consulta.codigo_sku || '-'}</p>
           <p><span class="label">Paciente:</span> ${paciente}</p>
           <p><span class="label">Fecha:</span> ${fecha}</p>
           <p><span class="label">Médico:</span> ${medico}</p>
           ${consulta.diagnostico_texto ? `<p><span class="label">Diagnóstico:</span> ${consulta.diagnostico_texto}</p>` : ''}
         </div>
         <div class="receta">${consulta.receta.replace(/\n/g, '<br>')}</div>
-        <div class="firma">
-          <div class="linea"></div>
-          <p>Firma del Médico</p>
-        </div>
-        <div class="footer">
-          Documento generado el ${new Date().toLocaleDateString('es-SV')}
-        </div>
-        <script>
-          window.onload = function() { window.print(); }
-        </script>
-      </body>
-      </html>
+        <div class="firma"><div class="linea"></div><p>Firma del Médico</p></div>
+        <div class="footer">Documento generado el ${new Date().toLocaleDateString('es-SV')}</div>
+        <script>window.onload = function() { window.print(); }</script>
+      </body></html>
     `);
     ventana.document.close();
   };
 
-  // Render
-  if (loading) return <LoadingSpinner />;
-  if (error) return <ErrorMessage message={error} onRetry={loadData} />;
+  if (!isClinica) {
+    return (
+      <div className="p-6 text-center text-gray-400">
+        <Clipboard className="w-12 h-12 mx-auto text-gray-600 mb-2" />
+        <p className="text-lg font-semibold">Esta función solo está disponible para clínicas.</p>
+      </div>
+    );
+  }
 
-  const { total, page, totalPages } = paginacion;
-  const tieneFiltrosActivos = Object.values(filtros).some(v => v && v !== '' && v !== 1 && v !== false);
+  if (loading && consultas.length === 0) return <LoadingSpinner />;
+  if (error && consultas.length === 0) {
+    return <ErrorMessage message={error} onRetry={loadData} />;
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -419,7 +407,42 @@ const Consultas = () => {
         </div>
       </div>
 
-      {/* FILTROS */}
+      {/* FILTROS DE PERÍODO */}
+      <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3 flex flex-wrap items-center gap-3">
+        <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
+          <Calendar size={14} className="text-purple-400" />
+          Período
+        </span>
+        <select
+          value={anio}
+          onChange={(e) => setAnio(parseInt(e.target.value))}
+          className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+        >
+          {aniosDisponibles.map((a) => (
+            <option key={a} value={a}>Año: {a}</option>
+          ))}
+        </select>
+        <select
+          value={mes}
+          onChange={(e) => setMes(parseInt(e.target.value))}
+          className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+        >
+          {MESES.map((n, i) => (
+            <option key={i + 1} value={i + 1}>{n}</option>
+          ))}
+        </select>
+        <button
+          onClick={volverMesActual}
+          className="text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 font-semibold transition"
+        >
+          Mes Actual
+        </button>
+        <span className="text-xs text-gray-500 ml-auto italic">
+          Mostrando: {MESES[mes - 1]} {anio}
+        </span>
+      </div>
+
+      {/* FILTROS AVANZADOS */}
       <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -436,27 +459,15 @@ const Consultas = () => {
             </button>
             <button
               onClick={handleExportarFiltrados}
-              className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+              disabled={consultas.length === 0}
+              className="bg-cyan-600/20 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed text-cyan-300 hover:text-white border border-cyan-500/40 px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
             >
               <Download size={13} /> Exportar Vista
             </button>
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <span className="italic">
-              {filtros.search ? `🔍 "${filtros.search}"` : 'Todas las consultas'}
-              {filtros.paciente_id && ` | Paciente seleccionado`}
-              {filtros.medico_id && ` | Médico seleccionado`}
-              {(filtros.fecha_inicio || filtros.fecha_fin) && ' | Rango de fechas'}
-            </span>
-            {tieneFiltrosActivos && (
-              <button
-                onClick={limpiarFiltros}
-                className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-semibold flex items-center gap-1 transition"
-              >
-                <X size={12} /> Limpiar
-              </button>
-            )}
-          </div>
+          <span className="text-xs text-gray-400 italic">
+            {consultas.length} consultas
+          </span>
         </div>
 
         {showFilters && (
@@ -465,16 +476,16 @@ const Consultas = () => {
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
               <input
                 type="text"
-                placeholder="Buscar por paciente..."
-                value={filtrosTemp.search}
-                onChange={(e) => setFiltrosTemp({ ...filtrosTemp, search: e.target.value })}
-                onKeyDown={handleSearchKeyDown}
+                placeholder="Buscar por paciente o SKU..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && loadData()}
                 className="pl-8 pr-7 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs w-full focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
             <select
-              value={filtrosTemp.paciente_id}
-              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, paciente_id: e.target.value })}
+              value={filtros.paciente_id}
+              onChange={(e) => setFiltros({ ...filtros, paciente_id: e.target.value })}
               className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="">Todos los pacientes</option>
@@ -483,8 +494,8 @@ const Consultas = () => {
               ))}
             </select>
             <select
-              value={filtrosTemp.medico_id}
-              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, medico_id: e.target.value })}
+              value={filtros.medico_id}
+              onChange={(e) => setFiltros({ ...filtros, medico_id: e.target.value })}
               className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="">Todos los médicos</option>
@@ -492,36 +503,12 @@ const Consultas = () => {
                 <option key={m.id} value={m.id}>{m.nombre}</option>
               ))}
             </select>
-            <div className="flex gap-2 col-span-full md:col-span-2 lg:col-span-4">
-              <input
-                type="date"
-                value={filtrosTemp.fecha_inicio}
-                onChange={(e) => setFiltrosTemp({ ...filtrosTemp, fecha_inicio: e.target.value })}
-                className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs flex-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                placeholder="Fecha inicio"
-              />
-              <input
-                type="date"
-                value={filtrosTemp.fecha_fin}
-                onChange={(e) => setFiltrosTemp({ ...filtrosTemp, fecha_fin: e.target.value })}
-                className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs flex-1 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                placeholder="Fecha fin"
-              />
-            </div>
-            <div className="col-span-full flex justify-end gap-2 mt-1">
-              <button
-                onClick={cancelarFiltros}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-semibold rounded-lg transition"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={aplicarFiltros}
-                className="px-4 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg shadow-md transition"
-              >
-                Aplicar Filtros
-              </button>
-            </div>
+            <button
+              onClick={loadData}
+              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition"
+            >
+              Aplicar Filtros
+            </button>
           </div>
         )}
       </div>
@@ -534,47 +521,56 @@ const Consultas = () => {
             <h3 className="text-xs font-bold text-gray-200 uppercase tracking-wider">Listado de Consultas</h3>
           </div>
           <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-700 text-gray-300 border border-gray-600">
-            Total: {total}
+            Total: {consultas.length}
           </span>
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div ref={tableRef} className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Paciente</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Médico</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Diagnóstico</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Receta</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">
+                  <Hash size={11} className="inline mr-1" />SKU
+                </th>
+                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha</th>
+                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Paciente</th>
+                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Médico</th>
+                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Diagnóstico</th>
+                <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Receta</th>
+                <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Factura</th>
+                <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
               {consultas.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan="8" className="px-4 py-10 text-center text-gray-400">
                     <Clipboard className="w-8 h-8 mx-auto text-gray-600 mb-1" />
-                    <p className="text-xs font-medium">No se encontraron consultas.</p>
+                    <p className="text-xs font-medium">
+                      No hay consultas en {MESES[mes - 1]} {anio}.
+                    </p>
                   </td>
                 </tr>
               ) : (
                 consultas.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
+                    <td className="px-3 py-2 text-purple-300 font-mono text-xs whitespace-nowrap">
+                      {c.codigo_sku || '-'}
+                    </td>
+                    <td className="px-3 py-2 text-gray-300 whitespace-nowrap">
                       {new Date(c.fecha_consulta).toLocaleString('es-SV')}
                     </td>
-                    <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">
-                      {c.paciente_nombre || 'N/A'}
+                    <td className="px-3 py-2 text-white font-semibold whitespace-nowrap">
+                      {c.paciente_nombre || 'N/A'} {c.paciente_apellidos || ''}
                     </td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
-                      {c.medico_nombre || 'N/A'}
-                    </td>
-                    <td className="px-2 py-1.5 text-gray-300 max-w-[150px] truncate">
+                    <td className="px-3 py-2 text-gray-300 whitespace-nowrap">{c.medico_nombre || 'N/A'}</td>
+                    <td className="px-3 py-2 text-gray-300 max-w-[180px] truncate">
                       {c.diagnostico_texto || '-'}
-                      {c.diagnostico_codigo && <span className="text-xs text-gray-500 ml-1">({c.diagnostico_codigo})</span>}
+                      {c.diagnostico_codigo && (
+                        <span className="text-xs text-gray-500 ml-1">({c.diagnostico_codigo})</span>
+                      )}
                     </td>
-                    <td className="px-2 py-1.5 text-center">
+                    <td className="px-3 py-2 text-center">
                       {c.receta ? (
                         <button
                           onClick={() => handleImprimirReceta(c)}
@@ -587,28 +583,51 @@ const Consultas = () => {
                         <span className="text-gray-500 text-xs">-</span>
                       )}
                     </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      {(() => {
+                        const tieneFacturaActiva = c.factura_id && c.factura_estado !== 'Anulada';
+                        if (!tieneFacturaActiva) {
+                          return (
+                            <button
+                              onClick={() => handleFacturar(c.id)}
+                              title="Facturar consulta"
+                              className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                            >
+                              <DollarSign size={12} />
+                            </button>
+                          );
+                        }
+                        const colores = {
+                          Pagada: 'bg-green-500/20 text-green-300 border-green-500/40',
+                          Emitida: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40',
+                          Borrador: 'bg-gray-500/20 text-gray-300 border-gray-500/40',
+                        };
+                        const colorClase = colores[c.factura_estado] || colores['Emitida'];
+                        return (
+                          <span
+                            title={`Factura ${c.factura_numero || c.factura_id} - ${c.factura_estado}`}
+                            className={`px-2 py-1 border rounded text-xs font-bold flex items-center gap-1 justify-center ${colorClase}`}
+                          >
+                            <CheckCircle size={12} /> {c.factura_estado}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => handleVerDetalle(c.id)}
                           title="Ver detalle"
-                          className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                          className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold transition"
                         >
                           <Eye size={12} />
                         </button>
                         <button
                           onClick={() => handleEdit(c)}
-                          title="Editar consulta"
-                          className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                          title="Editar"
+                          className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold transition"
                         >
                           <Edit2 size={12} />
-                        </button>
-                        <button
-                          onClick={() => handleFacturar(c.id)}
-                          title="Facturar"
-                          className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                        >
-                          <DollarSign size={12} />
                         </button>
                       </div>
                     </td>
@@ -618,64 +637,20 @@ const Consultas = () => {
             </tbody>
           </table>
         </div>
-
-        {totalPages > 1 && (
-          <div className="flex justify-between items-center px-4 py-2 border-t border-gray-700/80 bg-gray-900/50 text-xs">
-            <span className="text-gray-400">
-              Mostrando página <strong className="text-white">{page}</strong> de <strong className="text-white">{totalPages}</strong> ({total} consultas)
-            </span>
-            <div className="flex gap-1">
-              <button
-                onClick={() => goToPage(page - 1)}
-                disabled={page === 1}
-                className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-white transition"
-              >
-                Anterior
-              </button>
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                let p = i + 1;
-                if (totalPages > 5) {
-                  if (page <= 3) p = i + 1;
-                  else if (page >= totalPages - 2) p = totalPages - 4 + i;
-                  else p = page - 2 + i;
-                }
-                return (
-                  <button
-                    key={p}
-                    onClick={() => goToPage(p)}
-                    className={`px-2.5 py-1 rounded text-xs font-bold transition ${
-                      p === page
-                        ? 'bg-purple-600 text-white shadow-md'
-                        : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => goToPage(page + 1)}
-                disabled={page === totalPages}
-                className="px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-white transition"
-              >
-                Siguiente
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* ============================================================ */}
-      {/* MODALES */}
-      {/* ============================================================ */}
-
-      {/* Formulario de Consulta */}
+      {/* MODAL FORM CONSULTA */}
       {showForm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-4xl w-full max-h-[95vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-white">
                 {editing ? 'Editar Consulta' : 'Nueva Consulta'}
+                {editing?.codigo_sku && (
+                  <span className="ml-3 text-sm font-mono text-purple-300">
+                    {editing.codigo_sku}
+                  </span>
+                )}
               </h2>
               <button
                 onClick={() => { setShowForm(false); setEditing(null); }}
@@ -698,12 +673,19 @@ const Consultas = () => {
         </div>
       )}
 
-      {/* Detalle de Consulta */}
+      {/* MODAL DETALLE */}
       {showDetail && selectedConsulta && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-white">Detalle de Consulta</h2>
+              <h2 className="text-xl font-bold text-white">
+                Detalle de Consulta
+                {selectedConsulta.codigo_sku && (
+                  <span className="ml-3 text-sm font-mono text-purple-300">
+                    {selectedConsulta.codigo_sku}
+                  </span>
+                )}
+              </h2>
               <button onClick={() => setShowDetail(false)} className="text-gray-400 hover:text-white">
                 <X size={24} />
               </button>
@@ -717,41 +699,11 @@ const Consultas = () => {
                   <div><span className="text-gray-400">CIE-10:</span> <span className="text-white">{selectedConsulta.diagnostico_codigo}</span></div>
                 )}
               </div>
-
-              {selectedConsulta.presion_arterial && (
-                <div className="bg-gray-700/30 p-3 rounded-lg border border-gray-600">
-                  <h4 className="font-semibold text-gray-300 mb-2">Signos Vitales</h4>
-                  <div className="grid grid-cols-5 gap-2 text-xs">
-                    <div><span className="text-gray-400">PA:</span> {selectedConsulta.presion_arterial}</div>
-                    <div><span className="text-gray-400">FC:</span> {selectedConsulta.frecuencia_cardiaca}</div>
-                    <div><span className="text-gray-400">Temp:</span> {selectedConsulta.temperatura}°C</div>
-                    <div><span className="text-gray-400">Peso:</span> {selectedConsulta.peso} kg</div>
-                    <div><span className="text-gray-400">Talla:</span> {selectedConsulta.talla} cm</div>
-                  </div>
-                </div>
-              )}
-
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <span className="text-gray-400 font-semibold">S (Subjetivo):</span>
-                  <p className="text-white mt-1">{selectedConsulta.subjetivo || '-'}</p>
-                </div>
-                <div>
-                  <span className="text-gray-400 font-semibold">O (Objetivo):</span>
-                  <p className="text-white mt-1">{selectedConsulta.objetivo || '-'}</p>
-                </div>
-                <div>
-                  <span className="text-gray-400 font-semibold">A (Análisis):</span>
-                  <p className="text-white mt-1">{selectedConsulta.analisis || '-'}</p>
-                </div>
-                <div>
-                  <span className="text-gray-400 font-semibold">P (Plan):</span>
-                  <p className="text-white mt-1">{selectedConsulta.plan || '-'}</p>
-                </div>
-              </div>
-              <div>
-                <span className="text-gray-400 font-semibold">Diagnóstico:</span>
-                <span className="text-white ml-2">{selectedConsulta.diagnostico_texto || '-'}</span>
+                <div><span className="text-gray-400 font-semibold">S:</span><p className="text-white mt-1">{selectedConsulta.subjetivo || '-'}</p></div>
+                <div><span className="text-gray-400 font-semibold">O:</span><p className="text-white mt-1">{selectedConsulta.objetivo || '-'}</p></div>
+                <div><span className="text-gray-400 font-semibold">A:</span><p className="text-white mt-1">{selectedConsulta.analisis || '-'}</p></div>
+                <div><span className="text-gray-400 font-semibold">P:</span><p className="text-white mt-1">{selectedConsulta.plan || '-'}</p></div>
               </div>
               {selectedConsulta.receta && (
                 <div className="bg-cyan-900/20 border border-cyan-700 p-3 rounded-lg">
@@ -768,12 +720,6 @@ const Consultas = () => {
                 <Printer size={16} /> Imprimir Receta
               </button>
               <button
-                onClick={() => handleFacturar(selectedConsulta.id)}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition flex items-center gap-2"
-              >
-                <DollarSign size={16} /> Facturar
-              </button>
-              <button
                 onClick={() => setShowDetail(false)}
                 className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition"
               >
@@ -784,12 +730,15 @@ const Consultas = () => {
         </div>
       )}
 
-      {/* Modal de Facturación */}
+      {/* MODAL FACTURACIÓN */}
       {showFacturar && selectedConsulta && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-white">Facturar Consulta - {selectedConsulta.paciente_nombre}</h2>
+              <h2 className="text-xl font-bold text-white">
+                Facturar Consulta {selectedConsulta.codigo_sku && `· ${selectedConsulta.codigo_sku}`}
+                <p className="text-sm font-normal text-gray-400 mt-0.5">{selectedConsulta.paciente_nombre}</p>
+              </h2>
               <button onClick={() => setShowFacturar(false)} className="text-gray-400 hover:text-white">
                 <X size={24} />
               </button>
@@ -797,33 +746,39 @@ const Consultas = () => {
             <form onSubmit={handleFacturarSubmit} className="space-y-4">
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300">Tipo Documento</label>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                    Tipo Documento
+                  </label>
                   <select
                     value={facturaData.tipo_documento}
                     onChange={(e) => setFacturaData({ ...facturaData, tipo_documento: e.target.value })}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="FAF">FAF</option>
                     <option value="CCF">CCF</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300">Estado</label>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                    Estado
+                  </label>
                   <select
                     value={facturaData.estado}
                     onChange={(e) => setFacturaData({ ...facturaData, estado: e.target.value })}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="Emitida">Emitida</option>
                     <option value="Pagada">Pagada</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300">Condición</label>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                    Condición
+                  </label>
                   <select
                     value={facturaData.condicion_operacion}
                     onChange={(e) => setFacturaData({ ...facturaData, condicion_operacion: e.target.value })}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="Contado">Contado</option>
                     <option value="Credito">Crédito</option>
@@ -831,52 +786,166 @@ const Consultas = () => {
                 </div>
               </div>
 
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-sm font-semibold text-gray-300">Servicios</h4>
-                  <button type="button" onClick={addServicio} className="text-cyan-400 hover:text-cyan-300 text-sm">+ Agregar</button>
+              {/* Servicios */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+                    <FileText size={14} className="text-purple-400" />
+                    Servicios / Productos
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={addServicio}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition shadow-sm hover:shadow-purple-900/30"
+                  >
+                    <Plus size={12} /> Agregar servicio
+                  </button>
                 </div>
-                {facturaData.servicios.map((serv, idx) => (
-                  <div key={idx} className="flex items-center gap-2 mb-2">
-                    <select
-                      value={serv.producto_id}
-                      onChange={(e) => updateServicio(idx, 'producto_id', e.target.value)}
-                      className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+
+                {/* Encabezados de columnas */}
+                <div className="grid grid-cols-12 gap-2 px-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  <div className="col-span-5">Servicio</div>
+                  <div className="col-span-1 text-center">Cant.</div>
+                  <div className="col-span-2 text-center">Precio</div>
+                  <div className="col-span-3 text-center">Tipo / IVA</div>
+                  <div className="col-span-1"></div>
+                </div>
+
+                {/* Filas */}
+                <div className="space-y-2">
+                  {facturaData.servicios.map((serv, idx) => (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-12 gap-2 items-center bg-gray-900/40 border border-gray-700/70 rounded-lg p-2"
                     >
-                      <option value="">Seleccionar producto</option>
-                      {productos.map((p) => (
-                        <option key={p.id} value={p.id}>{p.nombre} - ${parseFloat(p.precio_unitario).toFixed(2)}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      min="1"
-                      value={serv.cantidad}
-                      onChange={(e) => updateServicio(idx, 'cantidad', parseInt(e.target.value) || 1)}
-                      className="w-20 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-                    />
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={serv.precio_unitario}
-                      onChange={(e) => updateServicio(idx, 'precio_unitario', parseFloat(e.target.value) || 0)}
-                      className="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-                    />
-                    <select
-                      value={serv.tipo_venta}
-                      onChange={(e) => updateServicio(idx, 'tipo_venta', e.target.value)}
-                      className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-                    >
-                      <option value="Gravado">Gravado</option>
-                      <option value="Exento">Exento</option>
-                      <option value="No_Sujeto">No Sujeto</option>
-                    </select>
-                    {facturaData.servicios.length > 1 && (
-                      <button type="button" onClick={() => removeServicio(idx)} className="text-red-400 hover:text-red-300">✕</button>
-                    )}
-                  </div>
-                ))}
+                      <div className="col-span-5 relative">
+                        <select
+                          value={serv.producto_id}
+                          onChange={(e) => updateServicio(idx, 'producto_id', e.target.value)}
+                          className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        >
+                          <option value="">Seleccionar servicio</option>
+                          {productos.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.nombre} - ${parseFloat(p.precio_unitario).toFixed(2)}
+                            </option>
+                          ))}
+                        </select>
+                        {serv._esExamen && (
+                          <span
+                            className="absolute -top-2 -right-1 px-1.5 py-0.5 bg-purple-600 text-white rounded-full text-[9px] font-bold shadow-md whitespace-nowrap"
+                            title={`Examen asociado: ${serv._examenNombre}`}
+                          >
+                            🔬 Examen
+                          </span>
+                        )}
+                        {serv._esVacuna && (
+                          <span
+                            className="absolute -top-2 -right-1 px-1.5 py-0.5 bg-pink-600 text-white rounded-full text-[9px] font-bold shadow-md whitespace-nowrap"
+                            title={`Vacuna aplicada: ${serv._vacunaNombre}${serv._lote ? ' · Lote: ' + serv._lote : ''}`}
+                          >
+                            💉 Vacuna
+                          </span>
+                        )}
+                      </div>
+
+                      <input
+                        type="number"
+                        min="1"
+                        value={serv.cantidad}
+                        onChange={(e) => updateServicio(idx, 'cantidad', parseInt(e.target.value) || 1)}
+                        className="col-span-1 px-1 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+
+                      <div className="col-span-2 relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={serv.precio_unitario}
+                          onChange={(e) => updateServicio(idx, 'precio_unitario', parseFloat(e.target.value) || 0)}
+                          className="w-full pl-5 pr-1 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm text-right focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+
+                      <div className="col-span-3">
+                        <select
+                          value={serv.tipo_venta}
+                          onChange={(e) => updateServicio(idx, 'tipo_venta', e.target.value)}
+                          className={`w-full px-2 py-1.5 border rounded-md text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                            serv.tipo_venta === 'Gravado'
+                              ? 'bg-emerald-900/30 border-emerald-700/50 text-emerald-200'
+                              : serv.tipo_venta === 'Exento'
+                              ? 'bg-cyan-900/30 border-cyan-700/50 text-cyan-200'
+                              : 'bg-gray-700/60 border-gray-600 text-gray-300'
+                          }`}
+                        >
+                          <option value="Gravado">Gravado · IVA 13%</option>
+                          <option value="Exento">Exento · Sin IVA</option>
+                          <option value="No_Sujeto">No Sujeto · Sin IVA</option>
+                        </select>
+                      </div>
+
+                      <div className="col-span-1 flex justify-center">
+                        {facturaData.servicios.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeServicio(idx)}
+                            className="text-rose-400 hover:text-rose-300 transition"
+                            title="Eliminar servicio"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
+
+              {/* Resumen de totales */}
+              {(() => {
+                const subtotal = facturaData.servicios.reduce((acc, s) => {
+                  return acc + (parseFloat(s.cantidad || 0) * parseFloat(s.precio_unitario || 0));
+                }, 0);
+                const iva13 = facturaData.servicios.reduce((acc, s) => {
+                  const sub = parseFloat(s.cantidad || 0) * parseFloat(s.precio_unitario || 0);
+                  return acc + (s.tipo_venta === 'Gravado' ? sub * 0.13 : 0);
+                }, 0);
+                const total = subtotal + iva13;
+
+                return (
+                  <div className="bg-gray-900/60 border border-gray-700 rounded-lg p-3 space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Subtotal</span>
+                      <span className="text-gray-200 font-mono">${subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">IVA 13%</span>
+                      <span className="text-gray-200 font-mono">${iva13.toFixed(2)}</span>
+                    </div>
+                    <div className="border-t border-gray-700 pt-1.5 flex justify-between items-center">
+                      <span className="text-sm font-bold text-gray-200 uppercase tracking-wider">Total a Pagar</span>
+                      <span className="text-xl font-bold text-emerald-400 font-mono">${total.toFixed(2)}</span>
+                    </div>
+                    
+                    {(() => {
+                      const numExamenes = facturaData.servicios.filter((s) => s._esExamen).length;
+                      const numVacunas = facturaData.servicios.filter((s) => s._esVacuna).length;
+                      if (numExamenes === 0 && numVacunas === 0) return null;
+                      return (
+                        <p className="text-xs text-purple-300 pt-1 flex items-center gap-1">
+                          <Activity size={12} />
+                          Incluye {numExamenes > 0 ? `${numExamenes} examen(es)` : ''} 
+                          {numExamenes > 0 && numVacunas > 0 ? ' y ' : ''}
+                          {numVacunas > 0 ? `${numVacunas} vacuna(s)` : ''} 
+                          interno(s) asociado(s) a esta consulta.
+                        </p>
+                      );
+                    })()}
+                  </div>
+                );
+              })()}
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
                 <button
@@ -888,9 +957,9 @@ const Consultas = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow-md shadow-emerald-900/30 flex items-center gap-2"
                 >
-                  Generar Factura
+                  <CheckCircle size={14} /> Generar Factura
                 </button>
               </div>
             </form>

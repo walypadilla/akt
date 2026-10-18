@@ -67,7 +67,7 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(
       { usuario_id: user.id, organizacion_id: user.organizacion_id, rol: user.rol },
       process.env.JWT_SECRET,
-      { expiresIn: '8h' }
+      { expiresIn: '12h' }
     );
 
     const esTemporal = user.password_temporal === 1;

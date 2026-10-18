@@ -1,5 +1,8 @@
+// frontend/src/pages/organization/Medicos.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import {
+  Stethoscope, Search, Plus, Download, Filter, X, Award, User, FileText, Power
+} from 'lucide-react';
 import {
   getMedicos,
   crearMedico,
@@ -7,41 +10,64 @@ import {
   eliminarMedico,
   reactivarMedico,
   exportarMedicosTodos,
-  exportarMedicosFiltrados
+  getAniosMedicos,
+  getMedicosDisponibles,
+  exportarMedicosFiltrados,
 } from '../../api/clinica';
+import MedicoDetalleModal from '../../components/common/clinica/MedicoDetalleModal';
+import MedicoForm from '../../components/forms/clinica/MedicoForm';
+import ConfirmModal from '../../components/common/ConfirmModal';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import ErrorMessage from '../../components/common/ErrorMessage';
+import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'react-toastify';
+import { getTodayLocal } from '../../utils/dateUtils';
 
 const Medicos = () => {
-  const navigate = useNavigate();
+  const { user } = useAuth();
+  const puedeGestionarMedicos = ['Admin', 'SUPER_ADMIN'].includes(user?.rol);
 
   // Estados de datos
   const [medicos, setMedicos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [busqueda, setBusqueda] = useState('');
-  const [estadoFiltro, setEstadoFiltro] = useState('activos'); // 'activos', 'inactivos', 'todos'
+  const [estadoFiltro, setEstadoFiltro] = useState('activos');
+  const [anio, setAnio] = useState(new Date().getFullYear());
+  const [mes, setMes] = useState('');
+  const [aniosDisponibles, setAniosDisponibles] = useState([]);
+  const [usuariosDisponibles, setUsuariosDisponibles] = useState([]);
+  const [detalleMedicoId, setDetalleMedicoId] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Estados para Modal de Crear/Editar
+  // Estados para Modal
   const [modalAbierto, setModalAbierto] = useState(false);
   const [medicoEditando, setMedicoEditando] = useState(null);
-  const [formData, setFormData] = useState({
-    nombre: '',
-    especialidad: '',
-    numero_licencia: '',
-    telefono: '',
-    email: ''
+  const [guardando, setGuardando] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null,
   });
 
+  // ============ CARGA DE DATOS ============
   const cargarMedicos = async () => {
     try {
       setLoading(true);
-      const params = {};
-      if (busqueda) params.q = busqueda;
-      if (estadoFiltro !== 'todos') params.estado = estadoFiltro;
+      setError(null);
+      const params = {
+        ...(busqueda && { q: busqueda }),
+        ...(estadoFiltro !== 'todos' && { estado: estadoFiltro }),
+        anio,
+        mes,
+      };
 
       const data = await getMedicos(params);
       setMedicos(Array.isArray(data) ? data : data.medicos || []);
     } catch (err) {
       console.error('Error al cargar médicos:', err);
+      setError('No se pudo cargar la lista de médicos.');
       toast.error('No se pudo cargar la lista de médicos.');
     } finally {
       setLoading(false);
@@ -50,76 +76,128 @@ const Medicos = () => {
 
   useEffect(() => {
     cargarMedicos();
-  }, [estadoFiltro]);
+  }, [estadoFiltro, anio, mes]);
+
+  useEffect(() => {
+    const fetchAnios = async () => {
+      try {
+        const data = await getAniosMedicos();
+        setAniosDisponibles(data && data.length > 0 ? data : [new Date().getFullYear()]);
+      } catch (err) {
+        console.error('Error al cargar años:', err);
+        setAniosDisponibles([new Date().getFullYear()]);
+      }
+    };
+    fetchAnios();
+  }, []);
+
+  useEffect(() => {
+    const fetchUsuarios = async () => {
+      try {
+        const data = await getMedicosDisponibles();
+        setUsuariosDisponibles(data || []);
+      } catch (err) {
+        console.error('Error al cargar usuarios disponibles:', err);
+      }
+    };
+    fetchUsuarios();
+  }, []);
 
   const handleBuscar = (e) => {
     e.preventDefault();
     cargarMedicos();
   };
 
-  // Apertura y cierre de modal
-  const abrirModalNuevo = () => {
+  const limpiarFiltros = () => {
+    setBusqueda('');
+    setEstadoFiltro('activos');
+    setAnio(new Date().getFullYear());
+    setMes('');
+  };
+
+  // ============ MODAL CRUD ============
+  const abrirModalNuevo = async () => {
     setMedicoEditando(null);
-    setFormData({
-      nombre: '',
-      especialidad: '',
-      numero_licencia: '',
-      telefono: '',
-      email: ''
-    });
     setModalAbierto(true);
+    try {
+      const data = await getMedicosDisponibles();
+      setUsuariosDisponibles(data || []);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const abrirModalEditar = (medico) => {
     setMedicoEditando(medico);
-    setFormData({
-      nombre: medico.nombre || '',
-      especialidad: medico.especialidad || '',
-      numero_licencia: medico.numero_licencia || '',
-      telefono: medico.telefono || '',
-      email: medico.email || ''
-    });
     setModalAbierto(true);
   };
 
-  const handleGuardar = async (e) => {
-    e.preventDefault();
+  const cerrarModal = () => {
+    setModalAbierto(false);
+    setMedicoEditando(null);
+  };
+
+  const handleGuardar = async (payload) => {
     try {
+      setGuardando(true);
       if (medicoEditando) {
-        await actualizarMedico(medicoEditando.id, formData);
+        await actualizarMedico(medicoEditando.id, payload);
         toast.success('Médico actualizado correctamente');
       } else {
-        await crearMedico(formData);
+        const result = await crearMedico(payload);
         toast.success('Médico creado correctamente');
+        if (result?.password_temporal) {
+          setTimeout(() => {
+            alert(
+              `Contraseña temporal para ${payload.correo}:\n\n${result.password_temporal}\n\nGuárdala y compártela con el médico.`
+            );
+          }, 300);
+        }
       }
-      setModalAbierto(false);
+      cerrarModal();
       cargarMedicos();
     } catch (err) {
       console.error('Error al guardar médico:', err);
-      toast.error('Ocurrió un error al guardar el médico.');
+      toast.error(err.response?.data?.message || 'Ocurrió un error al guardar el médico.');
+    } finally {
+      setGuardando(false);
     }
   };
 
-  // Acciones de estado (Inactivar / Reactivar)
-  const handleToggleEstado = async (medico) => {
+  // ============ TOGGLE ESTADO (con ConfirmModal) ============
+  const handleToggleEstado = (medico) => {
     const estaActivo = medico.activo ?? true;
-    try {
-      if (estaActivo) {
-        if (!window.confirm(`¿Inactivar al médico ${medico.nombre}?`)) return;
-        await eliminarMedico(medico.id);
-        toast.success('Médico inactivado');
-      } else {
-        await reactivarMedico(medico.id);
-        toast.success('Médico reactivado');
-      }
-      cargarMedicos();
-    } catch (err) {
-      console.error('Error al cambiar estado:', err);
-      toast.error('No se pudo cambiar el estado del médico.');
-    }
+    const accion = estaActivo ? 'Inactivar' : 'Reactivar';
+    const verbo = estaActivo ? 'inactivar' : 'reactivar';
+
+    setConfirmModal({
+      isOpen: true,
+      title: `${accion} Médico`,
+      message: `¿Estás seguro de ${verbo} al médico "${medico.nombre}"? ${
+        estaActivo
+          ? 'No podrá ser asignado a nuevas consultas.'
+          : 'Volverá a estar disponible para consultas.'
+      }`,
+      onConfirm: async () => {
+        try {
+          if (estaActivo) {
+            await eliminarMedico(medico.id);
+            toast.success('Médico inactivado');
+          } else {
+            await reactivarMedico(medico.id);
+            toast.success('Médico reactivado');
+          }
+          cargarMedicos();
+        } catch (err) {
+          console.error('Error al cambiar estado:', err);
+          toast.error('No se pudo cambiar el estado del médico.');
+        }
+        setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: null });
+      },
+    });
   };
 
-  // Exportaciones CSV
+  // ============ EXPORTACIONES ============
   const descargarCSV = (blob, nombreArchivo) => {
     const downloadUrl = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -134,7 +212,8 @@ const Medicos = () => {
   const handleExportarTodos = async () => {
     try {
       const blob = await exportarMedicosTodos();
-      descargarCSV(blob, 'medicos_todos.csv');
+      descargarCSV(blob, `medicos_todos_${getTodayLocal()}.csv`);
+      toast.success('Médicos exportados correctamente');
     } catch (err) {
       console.error('Error al exportar todos:', err);
       toast.error('Error al exportar el archivo.');
@@ -143,169 +222,262 @@ const Medicos = () => {
 
   const handleExportarFiltrados = async () => {
     try {
-      const params = {};
-      if (busqueda) params.q = busqueda;
-      if (estadoFiltro !== 'todos') params.estado = estadoFiltro;
-
+      const params = {
+        ...(busqueda && { q: busqueda }),
+        ...(estadoFiltro !== 'todos' && { estado: estadoFiltro }),
+        anio,
+        mes,
+      };
       const blob = await exportarMedicosFiltrados(params);
-      descargarCSV(blob, 'medicos_filtrados.csv');
+      descargarCSV(blob, `medicos_filtrados_${getTodayLocal()}.csv`);
+      toast.success('Médicos filtrados exportados');
     } catch (err) {
       console.error('Error al exportar filtrados:', err);
       toast.error('Error al exportar el archivo.');
     }
   };
 
+  // ============ RENDER ============
+  if (loading && medicos.length === 0) return <LoadingSpinner />;
+  if (error && medicos.length === 0) {
+    return <ErrorMessage message={error} onRetry={cargarMedicos} />;
+  }
+
+  const tieneFiltrosActivos = busqueda || estadoFiltro !== 'activos' || mes;
+
   return (
-    <div className="space-y-6">
-      {/* Encabezado y acciones principales */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="p-6 space-y-6">
+      {/* HEADER */}
+      <div className="flex flex-wrap justify-between items-center gap-4 bg-gray-800/60 p-4 rounded-xl border border-gray-700/70 shadow-lg">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Gestión de Médicos
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <Stethoscope className="w-6 h-6 text-purple-400" /> Gestión de Médicos
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Administra el personal médico, especialidades y licencias de la clínica
+          <p className="text-xs text-gray-400 mt-0.5">
+            Administra el personal médico, especialidades y licencias.
           </p>
         </div>
-
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleExportarTodos}
-            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg shadow transition"
+            className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
           >
-            Exportar Todos (CSV)
+            <Download size={14} /> Exportar Todo
           </button>
           <button
             onClick={handleExportarFiltrados}
             disabled={medicos.length === 0}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-500 text-white text-sm font-medium rounded-lg shadow transition"
+            className="bg-cyan-600/20 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed text-cyan-300 hover:text-white border border-cyan-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
           >
-            Exportar Filtrados
+            <Download size={14} /> Exportar Vista
           </button>
-          <button
-            onClick={abrirModalNuevo}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow transition"
-          >
-            + Nuevo Médico
-          </button>
+          {puedeGestionarMedicos && (
+            <button
+              onClick={abrirModalNuevo}
+              className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-md shadow-purple-900/30"
+            >
+              <Plus size={14} /> Nuevo Médico
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Barra de Búsqueda y Filtros */}
-      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow flex flex-col sm:flex-row justify-between gap-4">
-        <form onSubmit={handleBuscar} className="flex gap-2 w-full sm:w-auto">
-          <input
-            type="text"
-            placeholder="Buscar por nombre, especialidad o licencia..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-1.5 text-sm w-full sm:w-72"
-          />
-          <button
-            type="submit"
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
-          >
-            Buscar
-          </button>
-        </form>
-
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase">
-            Estado:
-          </label>
-          <select
-            value={estadoFiltro}
-            onChange={(e) => setEstadoFiltro(e.target.value)}
-            className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-1.5 text-sm"
-          >
-            <option value="activos">Activos</option>
-            <option value="inactivos">Inactivos</option>
-            <option value="todos">Todos</option>
-          </select>
+      {/* FILTROS */}
+      <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                showFilters
+                  ? 'bg-purple-600 text-white border-purple-500'
+                  : 'bg-gray-700/70 hover:bg-gray-700 text-gray-200 border-gray-600'
+              }`}
+            >
+              <Filter size={14} />
+              {showFilters ? 'Ocultar Filtros' : 'Filtrar Médicos'}
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <span className="italic">
+              {busqueda ? `🔍 "${busqueda}"` : 'Todos los médicos'}
+              {mes && ` | Mes: ${['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(mes) - 1]}`}
+              {estadoFiltro === 'activos' && ' | ✅ Activos'}
+              {estadoFiltro === 'inactivos' && ' | 🚫 Inactivos'}
+            </span>
+            {tieneFiltrosActivos && (
+              <button
+                onClick={limpiarFiltros}
+                className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-semibold flex items-center gap-1 transition"
+              >
+                <X size={12} /> Limpiar
+              </button>
+            )}
+          </div>
         </div>
+
+        {showFilters && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-3 p-3 border-t border-gray-700/70">
+            <form onSubmit={handleBuscar} className="relative col-span-full sm:col-span-1 lg:col-span-2">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre, especialidad o licencia..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="pl-8 pr-20 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs w-full focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <button
+                type="submit"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 px-3 py-0.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded transition"
+              >
+                Buscar
+              </button>
+            </form>
+            <select
+              value={anio}
+              onChange={(e) => setAnio(e.target.value)}
+              className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              {aniosDisponibles.map((a) => (
+                <option key={a} value={a}>Año: {a}</option>
+              ))}
+            </select>
+            <select
+              value={mes}
+              onChange={(e) => setMes(e.target.value)}
+              className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">Todos los meses</option>
+              {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map((n, i) => (
+                <option key={i + 1} value={i + 1}>{n}</option>
+              ))}
+            </select>
+            <select
+              value={estadoFiltro}
+              onChange={(e) => setEstadoFiltro(e.target.value)}
+              className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="activos">Solo activos</option>
+              <option value="inactivos">Solo inactivos</option>
+              <option value="todos">Todos los estados</option>
+            </select>
+          </div>
+        )}
       </div>
 
-      {/* Tabla de Médicos */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-gray-600 dark:text-gray-300">
-            <thead className="bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 uppercase text-xs">
+      {/* TABLA */}
+      <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-gray-700/80 bg-gray-800/40 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+            <h3 className="text-xs font-bold text-gray-200 uppercase tracking-wider">Listado de Médicos</h3>
+          </div>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-700 text-gray-300 border border-gray-600">
+            Total: {medicos.length}
+          </span>
+        </div>
+
+        <div className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+          <table className="min-w-full divide-y divide-gray-700/80 text-xs">
+            <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-4 py-3">Nombre</th>
-                <th className="px-4 py-3">Especialidad</th>
-                <th className="px-4 py-3">Licencia</th>
-                <th className="px-4 py-3">Contacto</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3 text-right">Acciones</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Especialidad</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Licencia</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Contacto</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Total Facturado</th>
+                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
-                    Cargando médicos...
+                  <td colSpan="7" className="px-4 py-10 text-center text-gray-400">
+                    <Stethoscope className="w-8 h-8 mx-auto text-gray-600 mb-1 animate-pulse" />
+                    <p className="text-xs font-medium">Cargando médicos...</p>
                   </td>
                 </tr>
               ) : medicos.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
-                    No se encontraron médicos con los filtros actuales.
+                  <td colSpan="7" className="px-4 py-10 text-center text-gray-400">
+                    <Stethoscope className="w-8 h-8 mx-auto text-gray-600 mb-1" />
+                    <p className="text-xs font-medium">No se encontraron médicos.</p>
                   </td>
                 </tr>
               ) : (
                 medicos.map((med) => {
                   const activo = med.activo ?? true;
                   return (
-                    <tr
-                      key={med.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition"
-                    >
-                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                        {med.nombre}
-                      </td>
-                      <td className="px-4 py-3">{med.especialidad || '-'}</td>
-                      <td className="px-4 py-3">{med.numero_licencia || '-'}</td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs">
-                          {med.telefono && <div>Tel: {med.telefono}</div>}
-                          {med.email && <div className="text-gray-400">{med.email}</div>}
-                          {!med.telefono && !med.email && '-'}
+                    <tr key={med.id} className="hover:bg-gray-700/30 transition-colors">
+                      <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-purple-600/30 flex items-center justify-center text-xs font-bold text-purple-300">
+                            {med.nombre?.charAt(0)?.toUpperCase() || 'M'}
+                          </div>
+                          <span>{med.nombre}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
+                        {med.especialidad || '-'}
+                      </td>
+                      <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">
+                        {med.numero_licencia || '-'}
+                      </td>
+                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
+                        <div className="text-xs">
+                          {med.correo && <div className="text-gray-400">{med.correo}</div>}
+                          {med.telefono && <div>Tel: {med.telefono}</div>}
+                          {!med.correo && !med.telefono && '-'}
+                        </div>
+                      </td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">
                         <span
                           className={`px-2 py-0.5 rounded text-xs font-semibold ${
                             activo
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                              ? 'bg-green-900/40 text-green-300 border border-green-700/40'
+                              : 'bg-rose-900/40 text-rose-300 border border-rose-700/40'
                           }`}
                         >
-                          {activo ? 'Activo' : 'Inactivo'}
+                          {activo ? '● Activo' : '● Inactivo'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right space-x-2">
-                        <button
-                          onClick={() => navigate(`/medicos/${med.id}/detalle`)}
-                          className="text-blue-600 dark:text-blue-400 hover:underline text-xs font-medium"
-                        >
-                          Ver Detalle
-                        </button>
-                        <button
-                          onClick={() => abrirModalEditar(med)}
-                          className="text-yellow-600 dark:text-yellow-400 hover:underline text-xs font-medium"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => handleToggleEstado(med)}
-                          className={`${
-                            activo
-                              ? 'text-red-600 dark:text-red-400'
-                              : 'text-green-600 dark:text-green-400'
-                          } hover:underline text-xs font-medium`}
-                        >
-                          {activo ? 'Inactivar' : 'Reactivar'}
-                        </button>
+                      <td className="px-2 py-1.5 font-semibold text-emerald-400 whitespace-nowrap">
+                        ${Number(med.total_facturado || 0).toFixed(2)}
+                      </td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => setDetalleMedicoId(med.id)}
+                            title="Ver detalle"
+                            className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold transition"
+                          >
+                            <FileText size={12} />
+                          </button>
+                          {puedeGestionarMedicos && (
+                            <>
+                              <button
+                                onClick={() => abrirModalEditar(med)}
+                                title="Editar médico"
+                                className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold transition"
+                              >
+                                <Award size={12} />
+                              </button>
+                              <button
+                                onClick={() => handleToggleEstado(med)}
+                                title={activo ? 'Inactivar' : 'Reactivar'}
+                                className={`px-2 py-1 border rounded text-xs font-semibold transition ${
+                                  activo
+                                    ? 'bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border-rose-500/30'
+                                    : 'bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border-emerald-500/30'
+                                }`}
+                              >
+                                <Power size={12} />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -316,109 +488,58 @@ const Medicos = () => {
         </div>
       </div>
 
-      {/* Modal para Crear / Editar Médico */}
+      {/* MODAL CRUD */}
       {modalAbierto && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <h3 className="font-semibold text-lg text-gray-900 dark:text-white">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-md w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Stethoscope size={20} className="text-purple-400" />
                 {medicoEditando ? 'Editar Médico' : 'Registrar Nuevo Médico'}
-              </h3>
+              </h2>
               <button
-                onClick={() => setModalAbierto(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                onClick={cerrarModal}
+                className="text-gray-400 hover:text-white transition"
               >
-                ✕
+                <X size={24} />
               </button>
             </div>
-
-            <form onSubmit={handleGuardar} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase mb-1">
-                  Nombre Completo *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm"
-                  placeholder="Dr. Nombre Apellido"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase mb-1">
-                  Especialidad
-                </label>
-                <input
-                  type="text"
-                  value={formData.especialidad}
-                  onChange={(e) => setFormData({ ...formData, especialidad: e.target.value })}
-                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm"
-                  placeholder="Ej. Pediatría, Medicina General"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase mb-1">
-                  Número de Licencia / JVPM
-                </label>
-                <input
-                  type="text"
-                  value={formData.numero_licencia}
-                  onChange={(e) => setFormData({ ...formData, numero_licencia: e.target.value })}
-                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm"
-                  placeholder="Ej. JVPM-12345"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase mb-1">
-                    Teléfono
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.telefono}
-                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
-                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm"
-                    placeholder="2222-0000"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase mb-1">
-                    Correo Electrónico
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm"
-                    placeholder="medico@clinica.com"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  type="button"
-                  onClick={() => setModalAbierto(false)}
-                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm font-medium rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
-                >
-                  {medicoEditando ? 'Actualizar' : 'Guardar'}
-                </button>
-              </div>
-            </form>
+            <MedicoForm
+              initialData={
+                medicoEditando || {
+                  usuario_id: '',
+                  especialidad: '',
+                  numero_licencia: '',
+                }
+              }
+              usuarios={usuariosDisponibles}
+              onSubmit={handleGuardar}
+              onCancel={cerrarModal}
+              loading={guardando}
+              isEditing={!!medicoEditando}
+            />
           </div>
         </div>
       )}
+
+      {/* MODAL DETALLE */}
+      {detalleMedicoId && (
+        <MedicoDetalleModal
+          medicoId={detalleMedicoId}
+          onClose={() => setDetalleMedicoId(null)}
+        />
+      )}
+
+      {/* CONFIRM MODAL */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() =>
+          setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: null })
+        }
+      />
     </div>
   );
 };

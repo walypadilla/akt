@@ -2,7 +2,7 @@
 const express = require('express');
 const { authMiddleware, isSuperAdmin } = require('../middleware/authMiddleware');
 const superAdminController = require('../controllers/superAdminController');
-const upload = require('../middleware/uploadMiddleware');
+const {upload} = require('../middleware/uploadMiddleware');
 
 
 const router = express.Router();

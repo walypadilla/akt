@@ -84,47 +84,67 @@ class Paciente {
   }
 
   static async create(data) {
-    const {
-      organizacion_id, cliente_id, nombre, apellidos,
-      fecha_nacimiento, genero, especie, raza, color,
+  const {
+    organizacion_id, cliente_id, tipo_paciente,
+    nombre, apellidos, fecha_nacimiento, genero,
+    dui, telefono, correo,
+    especie, raza, color, senas_particulares, chip, peso,
+    ocupacion, grupo_sanguineo, enfermedades_cronicas, contacto_emergencia,
+    tipo_denticion, habitos_bucales, ortodoncia_previa, ultima_visita_dentista,
+    sensibilidad_dental, estado_reproductivo, tipo_alimentacion, habitat,
+    alergias, antecedentes, codigo_expediente
+  } = data;
+
+  const [result] = await pool.query(
+    `INSERT INTO pacientes
+     (organizacion_id, cliente_id, tipo_paciente, nombre, apellidos,
+      fecha_nacimiento, genero, dui, telefono, correo,
+      especie, raza, color,
       senas_particulares, chip, peso,
       ocupacion, grupo_sanguineo, enfermedades_cronicas, contacto_emergencia,
       tipo_denticion, habitos_bucales, ortodoncia_previa, ultima_visita_dentista,
       sensibilidad_dental, estado_reproductivo, tipo_alimentacion, habitat,
-      alergias, antecedentes, codigo_expediente
-    } = data;
-
-    const [result] = await pool.query(
-      `INSERT INTO pacientes
-       (organizacion_id, cliente_id, nombre, apellidos,
-        fecha_nacimiento, genero, especie, raza, color,
-        senas_particulares, chip, peso,
-        ocupacion, grupo_sanguineo, enfermedades_cronicas, contacto_emergencia,
-        tipo_denticion, habitos_bucales, ortodoncia_previa, ultima_visita_dentista,
-        sensibilidad_dental, estado_reproductivo, tipo_alimentacion, habitat,
-        alergias, antecedentes, codigo_expediente)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        organizacion_id, cliente_id, nombre, apellidos || null,
-        fecha_nacimiento || null, genero || null, especie || null, raza || null,
-        color || null, senas_particulares || null, chip || null, peso || null,
-        ocupacion || null, grupo_sanguineo || null, enfermedades_cronicas || null,
-        contacto_emergencia || null, tipo_denticion || null, habitos_bucales || null,
-        ortodoncia_previa !== undefined ? (ortodoncia_previa ? 1 : 0) : null,
-        ultima_visita_dentista || null, sensibilidad_dental || null,
-        estado_reproductivo || null, tipo_alimentacion || null, habitat || null,
-        alergias || null, antecedentes || null, codigo_expediente || null
-      ]
-    );
-    return result.insertId;
-  }
+      alergias, antecedentes, codigo_expediente)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      // 1-2
+      organizacion_id, cliente_id,
+      // 3
+      tipo_paciente || 'Humano',
+      // 4-5
+      nombre, apellidos || null,
+      // 6-10
+      fecha_nacimiento || null, genero || null,
+      dui || null, telefono || null, correo || null,
+      // 11-13
+      especie || null, raza || null, color || null,
+      // 14-16
+      senas_particulares || null, chip || null, peso || null,
+      // 17-20
+      ocupacion || null, grupo_sanguineo || null, enfermedades_cronicas || null,
+      contacto_emergencia || null,
+      // 21-24
+      tipo_denticion || null, habitos_bucales || null,
+      ortodoncia_previa !== undefined ? (ortodoncia_previa ? 1 : 0) : null,
+      ultima_visita_dentista || null,
+      // 25-28
+      sensibilidad_dental || null, estado_reproductivo || null,
+      tipo_alimentacion || null, habitat || null,
+      // 29-31
+      alergias || null, antecedentes || null, codigo_expediente || null,
+    ]
+  );
+  return result.insertId;
+}
 
   static async update(id, organizacion_id, data) {
     const fields = [];
     const values = [];
 
     const allowed = [
-      'cliente_id', 'nombre', 'apellidos', 'fecha_nacimiento', 'genero',
+      'cliente_id', 'tipo_paciente',                 // ← tipo_paciente
+      'nombre', 'apellidos', 'fecha_nacimiento', 'genero',
+      'dui', 'telefono', 'correo',                   // ← nuevos
       'especie', 'raza', 'color', 'senas_particulares', 'chip', 'peso',
       'ocupacion', 'grupo_sanguineo', 'enfermedades_cronicas', 'contacto_emergencia',
       'tipo_denticion', 'habitos_bucales', 'ortodoncia_previa', 'ultima_visita_dentista',

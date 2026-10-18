@@ -9,12 +9,10 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Cargar usuario desde localStorage
     const userData = localStorage.getItem('user');
     if (userData) {
       try {
-        const parsedUser = JSON.parse(userData);
-        setUser(parsedUser);
+        setUser(JSON.parse(userData));
       } catch (error) {
         console.error('Error parsing user data:', error);
         setUser(null);

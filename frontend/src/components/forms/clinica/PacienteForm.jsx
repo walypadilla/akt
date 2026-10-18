@@ -1,14 +1,12 @@
-// frontend/src/forms/clinica/PacienteForm.jsx
+// frontend/src/components/forms/clinica/PacienteForm.jsx
 import React, { useState, useEffect } from 'react';
 import Select from 'react-select';
 
-// Función para normalizar texto (sin acentos, minúsculas)
 const normalizar = (texto) => {
   if (!texto) return '';
   return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 };
 
-// Función para generar código de expediente
 const generarCodigoExpediente = (nombre, apellidos) => {
   const hoy = new Date();
   const fecha = hoy.getFullYear() +
@@ -28,76 +26,86 @@ const PacienteForm = ({
   loading,
   isEditing = false,
 }) => {
-  // Normalizar tipo para comparaciones
   const tipoNorm = normalizar(tipoOrganizacion);
   const isVeterinaria = tipoNorm === 'clinica veterinaria';
   const isDental = tipoNorm === 'clinica dental';
   const isGeneral = tipoNorm === 'clinica general';
   const isHumano = isGeneral || isDental;
 
-  // Estado inicial
-  const getInitialState = () => {
-    const base = {
-      cliente_id: initialData.cliente_id || '',
-      codigo_expediente: initialData.codigo_expediente || '',
-      alergias: initialData.alergias || '',
-      antecedentes: initialData.antecedentes || '',
-      nombre: initialData.nombre || '',
-      apellidos: initialData.apellidos || '',
-      fecha_nacimiento: initialData.fecha_nacimiento || '',
-      genero: initialData.genero || 'M',
-      dui: initialData.dui || '',
-      ocupacion: initialData.ocupacion || '',
-      telefono: initialData.telefono || '',
-      grupo_sanguineo: initialData.grupo_sanguineo || '',
-      enfermedades_cronicas: initialData.enfermedades_cronicas || '',
-      contacto_emergencia: initialData.contacto_emergencia || '',
-      tipo_denticion: initialData.tipo_denticion || '',
-      habitos_bucales: initialData.habitos_bucales || '',
-      ortodoncia_previa: initialData.ortodoncia_previa !== undefined ? initialData.ortodoncia_previa : undefined,
-      ultima_visita_dentista: initialData.ultima_visita_dentista || '',
-      sensibilidad_dental: initialData.sensibilidad_dental || '',
-      especie: initialData.especie || '',
-      raza: initialData.raza || '',
-      color: initialData.color || '',
-      chip: initialData.chip || '',
-      peso: initialData.peso || '',
-      estado_reproductivo: initialData.estado_reproductivo || '',
-      tipo_alimentacion: initialData.tipo_alimentacion || '',
-      habitat: initialData.habitat || '',
-      senas_particulares: initialData.senas_particulares || '',
-    };
-    return base;
-  };
+  // tipo_paciente auto-asignado
+  const tipoPacienteAuto = isVeterinaria ? 'Mascota' : 'Humano';
+
+  const getInitialState = () => ({
+    cliente_id: initialData.cliente_id || '',
+    tipo_paciente: initialData.tipo_paciente || tipoPacienteAuto,
+    codigo_expediente: initialData.codigo_expediente || '',
+    // Comunes
+    nombre: initialData.nombre || '',
+    fecha_nacimiento: initialData.fecha_nacimiento || '',
+    peso: initialData.peso || '',
+    alergias: initialData.alergias || '',
+    antecedentes: initialData.antecedentes || '',
+    // Humanos
+    apellidos: initialData.apellidos || '',
+    genero: initialData.genero || 'M',
+    dui: initialData.dui || '',
+    telefono: initialData.telefono || '',
+    correo: initialData.correo || '',
+    ocupacion: initialData.ocupacion || '',
+    grupo_sanguineo: initialData.grupo_sanguineo || '',
+    enfermedades_cronicas: initialData.enfermedades_cronicas || '',
+    contacto_emergencia: initialData.contacto_emergencia || '',
+    // Dental
+    tipo_denticion: initialData.tipo_denticion || '',
+    habitos_bucales: initialData.habitos_bucales || '',
+    ortodoncia_previa: initialData.ortodoncia_previa !== undefined ? initialData.ortodoncia_previa : undefined,
+    ultima_visita_dentista: initialData.ultima_visita_dentista || '',
+    sensibilidad_dental: initialData.sensibilidad_dental || '',
+    // Veterinaria
+    especie: initialData.especie || '',
+    raza: initialData.raza || '',
+    color: initialData.color || '',
+    chip: initialData.chip || '',
+    estado_reproductivo: initialData.estado_reproductivo || '',
+    tipo_alimentacion: initialData.tipo_alimentacion || '',
+    habitat: initialData.habitat || '',
+    senas_particulares: initialData.senas_particulares || '',
+  });
 
   const [formData, setFormData] = useState(getInitialState());
   const [errors, setErrors] = useState({});
   const [copiarCliente, setCopiarCliente] = useState(false);
 
-  // Opciones para react-select (clientes)
-  const clienteOptions = clientes.map(c => ({
+  const clienteOptions = clientes.map((c) => ({
     value: c.id,
     label: `${c.nombre} ${c.apellidos || ''} - ${c.nit || c.dui || 'Sin documento'}`,
     ...c,
   }));
 
-  const clienteSeleccionado = clientes.find(c => c.id === formData.cliente_id);
+  const clienteSeleccionado = clientes.find((c) => c.id === formData.cliente_id);
 
+  // Generar código de expediente automático
   useEffect(() => {
     if (!isEditing && !formData.codigo_expediente && formData.nombre) {
-      const codigo = generarCodigoExpediente(formData.nombre, formData.apellidos);
-      setFormData(prev => ({ ...prev, codigo_expediente: codigo }));
+      setFormData((prev) => ({
+        ...prev,
+        codigo_expediente: generarCodigoExpediente(formData.nombre, formData.apellidos),
+      }));
     }
   }, [formData.nombre, formData.apellidos, isEditing]);
 
+  // Copiar datos del cliente (solo humanos)
   useEffect(() => {
     if (copiarCliente && clienteSeleccionado && isHumano) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         nombre: clienteSeleccionado.nombre || '',
         apellidos: clienteSeleccionado.apellidos || '',
         dui: clienteSeleccionado.dui || '',
-        telefono: clienteSeleccionado.telefono ? clienteSeleccionado.telefono.replace(/^\+503/, '') : '',
+        telefono: clienteSeleccionado.telefono
+          ? clienteSeleccionado.telefono.replace(/^\+503/, '')
+          : '',
+        correo: clienteSeleccionado.correo || '',
       }));
     }
   }, [copiarCliente, clienteSeleccionado, isHumano]);
@@ -109,35 +117,41 @@ const PacienteForm = ({
   };
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    const val = type === 'checkbox' ? checked : value;
-    setFormData({ ...formData, [name]: val });
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
     if (errors[name]) setErrors({ ...errors, [name]: '' });
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const newErrors = {};
+
     if (!formData.cliente_id) newErrors.cliente_id = 'Seleccione un cliente';
-    if (!formData.nombre) newErrors.nombre = 'Nombre es obligatorio';
-    if (!isVeterinaria && !formData.fecha_nacimiento) {
-      newErrors.fecha_nacimiento = 'Fecha de nacimiento es obligatoria';
+    if (!formData.nombre) newErrors.nombre = 'El nombre es obligatorio';
+    if (isHumano && !formData.fecha_nacimiento) {
+      newErrors.fecha_nacimiento = 'La fecha de nacimiento es obligatoria';
     }
     if (formData.fecha_nacimiento) {
       const fecha = new Date(formData.fecha_nacimiento);
-      const hoy = new Date();
-      if (fecha > hoy) newErrors.fecha_nacimiento = 'La fecha no puede ser futura';
+      if (fecha > new Date()) newErrors.fecha_nacimiento = 'La fecha no puede ser futura';
     }
-    if (formData.peso && formData.peso <= 0) newErrors.peso = 'El peso debe ser mayor a 0';
+    if (formData.peso && parseFloat(formData.peso) <= 0) {
+      newErrors.peso = 'El peso debe ser mayor a 0';
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
 
-    const cleanData = { ...formData };
+    // Limpiar campos no aplicables
+    const cleanData = { ...formData, tipo_paciente: tipoPacienteAuto };
+
     if (isVeterinaria) {
+      delete cleanData.apellidos;
       delete cleanData.dui;
+      delete cleanData.telefono;
+      delete cleanData.correo;
       delete cleanData.ocupacion;
       delete cleanData.grupo_sanguineo;
       delete cleanData.enfermedades_cronicas;
@@ -147,56 +161,83 @@ const PacienteForm = ({
       delete cleanData.ortodoncia_previa;
       delete cleanData.ultima_visita_dentista;
       delete cleanData.sensibilidad_dental;
-    } else {
+    } else if (isGeneral) {
       delete cleanData.especie;
       delete cleanData.raza;
       delete cleanData.color;
+      delete cleanData.chip;
       delete cleanData.estado_reproductivo;
       delete cleanData.tipo_alimentacion;
       delete cleanData.habitat;
       delete cleanData.senas_particulares;
+      delete cleanData.tipo_denticion;
+      delete cleanData.habitos_bucales;
+      delete cleanData.ortodoncia_previa;
+      delete cleanData.ultima_visita_dentista;
+      delete cleanData.sensibilidad_dental;
+    } else if (isDental) {
+      delete cleanData.especie;
+      delete cleanData.raza;
+      delete cleanData.color;
+      delete cleanData.chip;
+      delete cleanData.estado_reproductivo;
+      delete cleanData.tipo_alimentacion;
+      delete cleanData.habitat;
+      delete cleanData.senas_particulares;
+      delete cleanData.grupo_sanguineo;
     }
+
     onSubmit(cleanData);
   };
 
+  const inputClass = (field) =>
+    `w-full px-3 py-2 bg-gray-700 border ${
+      errors[field] ? 'border-red-500' : 'border-gray-600'
+    } rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500`;
+
+  const selectTheme = (theme) => ({
+    ...theme,
+    colors: {
+      ...theme.colors,
+      primary: '#8b5cf6',
+      primary25: '#4c1d95',
+      primary50: '#6d28d9',
+      neutral0: '#1f2937',
+      neutral5: '#374151',
+      neutral10: '#4b5563',
+      neutral20: '#6b7280',
+      neutral30: '#9ca3af',
+      neutral40: '#d1d5db',
+      neutral50: '#e5e7eb',
+      neutral60: '#f3f4f6',
+      neutral70: '#f9fafb',
+      neutral80: '#ffffff',
+      neutral90: '#ffffff',
+    },
+  });
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Bloque común */}
+      {/* ============ BLOQUE COMÚN ============ */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Cliente / Responsable *</label>
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            {isVeterinaria ? 'Dueño / Tutor *' : 'Cliente / Responsable *'}
+          </label>
           <Select
             options={clienteOptions}
-            value={clienteOptions.find(opt => opt.value === formData.cliente_id) || null}
+            value={clienteOptions.find((opt) => opt.value === formData.cliente_id) || null}
             onChange={handleClienteChange}
             placeholder="Buscar cliente..."
             isClearable
             isSearchable
+            theme={selectTheme}
             className="react-select-container"
             classNamePrefix="react-select"
-            theme={(theme) => ({
-              ...theme,
-              colors: {
-                ...theme.colors,
-                primary: '#8b5cf6',
-                primary25: '#4c1d95',
-                primary50: '#6d28d9',
-                neutral0: '#1f2937',
-                neutral5: '#374151',
-                neutral10: '#4b5563',
-                neutral20: '#6b7280',
-                neutral30: '#9ca3af',
-                neutral40: '#d1d5db',
-                neutral50: '#e5e7eb',
-                neutral60: '#f3f4f6',
-                neutral70: '#f9fafb',
-                neutral80: '#ffffff',
-                neutral90: '#ffffff',
-              },
-            })}
           />
           {errors.cliente_id && <p className="text-red-400 text-xs mt-1">{errors.cliente_id}</p>}
         </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">Código de Expediente</label>
           <input
@@ -204,10 +245,10 @@ const PacienteForm = ({
             name="codigo_expediente"
             value={formData.codigo_expediente}
             onChange={handleChange}
-            placeholder="EXP-20260802-JP-123"
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+            placeholder="EXP-YYYYMMDD-XX-NNN"
+            className={inputClass('codigo_expediente')}
           />
-          <p className="text-xs text-gray-400 mt-1">Se genera automáticamente si se deja vacío</p>
+          <p className="text-xs text-gray-400 mt-1">Se genera automáticamente</p>
         </div>
 
         {isHumano && (
@@ -227,35 +268,12 @@ const PacienteForm = ({
             )}
           </div>
         )}
-
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-300 mb-1">Alergias Conocidas</label>
-          <textarea
-            name="alergias"
-            value={formData.alergias}
-            onChange={handleChange}
-            rows={2}
-            placeholder="Ej. Penicilina, polen, látex..."
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-          />
-        </div>
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-300 mb-1">Antecedentes / Observaciones</label>
-          <textarea
-            name="antecedentes"
-            value={formData.antecedentes}
-            onChange={handleChange}
-            rows={2}
-            placeholder="Antecedentes médicos relevantes..."
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-          />
-        </div>
       </div>
 
-      {/* ====== BLOQUE PARA CLÍNICAS GENERAL Y DENTAL ====== */}
-      {(isGeneral || isDental) && (
-        <div className="border-t border-gray-700 pt-4 mt-2">
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">Datos del Paciente (Humano)</h3>
+      {/* ============ BLOQUE HUMANO (General + Dental) ============ */}
+      {isHumano && (
+        <div className="border-t border-gray-700 p-2">
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">Datos del Paciente</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Nombre *</label>
@@ -264,7 +282,7 @@ const PacienteForm = ({
                 name="nombre"
                 value={formData.nombre}
                 onChange={handleChange}
-                className={`w-full px-3 py-2 bg-gray-700 border ${errors.nombre ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white`}
+                className={inputClass('nombre')}
               />
               {errors.nombre && <p className="text-red-400 text-xs mt-1">{errors.nombre}</p>}
             </div>
@@ -275,7 +293,7 @@ const PacienteForm = ({
                 name="apellidos"
                 value={formData.apellidos}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('apellidos')}
               />
             </div>
             <div>
@@ -286,7 +304,7 @@ const PacienteForm = ({
                 value={formData.dui}
                 onChange={handleChange}
                 placeholder="00000000-0"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('dui')}
               />
             </div>
             <div>
@@ -296,91 +314,102 @@ const PacienteForm = ({
                 name="fecha_nacimiento"
                 value={formData.fecha_nacimiento}
                 onChange={handleChange}
-                className={`w-full px-3 py-2 bg-gray-700 border ${errors.fecha_nacimiento ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white`}
+                className={inputClass('fecha_nacimiento')}
               />
               {errors.fecha_nacimiento && <p className="text-red-400 text-xs mt-1">{errors.fecha_nacimiento}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Sexo</label>
-              <select
-                name="genero"
-                value={formData.genero}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              >
+              <select name="genero" value={formData.genero} onChange={handleChange} className={inputClass('genero')}>
                 <option value="M">Masculino</option>
                 <option value="F">Femenino</option>
                 <option value="Otro">Otro</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Ocupación / Trabajo</label>
-              <input
-                type="text"
-                name="ocupacion"
-                value={formData.ocupacion}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Teléfono Directo</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Teléfono</label>
               <input
                 type="tel"
                 name="telefono"
                 value={formData.telefono}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('telefono')}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Grupo Sanguíneo</label>
-              <select
-                name="grupo_sanguineo"
-                value={formData.grupo_sanguineo}
+              <label className="block text-sm font-medium text-gray-300 mb-1">Correo Electrónico</label>
+              <input
+                type="email"
+                name="correo"
+                value={formData.correo}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              >
-                <option value="">Seleccionar</option>
-                <option value="A+">A+</option>
-                <option value="A-">A-</option>
-                <option value="B+">B+</option>
-                <option value="B-">B-</option>
-                <option value="O+">O+</option>
-                <option value="O-">O-</option>
-                <option value="AB+">AB+</option>
-                <option value="AB-">AB-</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-300 mb-1">Enfermedades Crónicas / Base</label>
-              <textarea
-                name="enfermedades_cronicas"
-                value={formData.enfermedades_cronicas}
-                onChange={handleChange}
-                rows={2}
-                placeholder="Diabetes, Hipertensión, Asma, etc."
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('correo')}
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Ocupación</label>
+              <input
+                type="text"
+                name="ocupacion"
+                value={formData.ocupacion}
+                onChange={handleChange}
+                className={inputClass('ocupacion')}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Peso (kg)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                name="peso"
+                value={formData.peso}
+                onChange={handleChange}
+                className={inputClass('peso')}
+              />
+              {errors.peso && <p className="text-red-400 text-xs mt-1">{errors.peso}</p>}
+            </div>
+            {isGeneral && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Grupo Sanguíneo</label>
+                <select
+                  name="grupo_sanguineo"
+                  value={formData.grupo_sanguineo}
+                  onChange={handleChange}
+                  className={inputClass('grupo_sanguineo')}
+                >
+                  <option value="">Seleccionar</option>
+                  <option value="A+">A+</option>
+                  <option value="A-">A-</option>
+                  <option value="B+">B+</option>
+                  <option value="B-">B-</option>
+                  <option value="O+">O+</option>
+                  <option value="O-">O-</option>
+                  <option value="AB+">AB+</option>
+                  <option value="AB-">AB-</option>
+                </select>
+              </div>
+            )}
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-300 mb-1">Contacto de Emergencia (Nombre y Teléfono)</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Contacto de Emergencia (Nombre y Teléfono)
+              </label>
               <input
                 type="text"
                 name="contacto_emergencia"
                 value={formData.contacto_emergencia}
                 onChange={handleChange}
                 placeholder="Ej. María Pérez - 7890-1234"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('contacto_emergencia')}
               />
             </div>
           </div>
         </div>
       )}
 
-      {/* ====== BLOQUE DENTAL (adicional) ====== */}
+      {/* ============ BLOQUE DENTAL ============ */}
       {isDental && (
-        <div className="border-t border-gray-700 pt-4 mt-2">
+        <div className="border-t border-gray-700 p-2">
           <h3 className="text-sm font-semibold text-gray-300 mb-3">Datos Odontológicos</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -389,7 +418,7 @@ const PacienteForm = ({
                 name="tipo_denticion"
                 value={formData.tipo_denticion}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('tipo_denticion')}
               >
                 <option value="">Seleccionar</option>
                 <option value="Adulto">Adulto</option>
@@ -405,19 +434,25 @@ const PacienteForm = ({
                 value={formData.habitos_bucales}
                 onChange={handleChange}
                 placeholder="Bruxismo, Fumador, Morder objetos..."
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('habitos_bucales')}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">¿Ortodoncia / Prótesis previa?</label>
               <select
                 name="ortodoncia_previa"
-                value={formData.ortodoncia_previa !== undefined ? (formData.ortodoncia_previa ? 'true' : 'false') : ''}
+                value={
+                  formData.ortodoncia_previa !== undefined
+                    ? formData.ortodoncia_previa
+                      ? 'true'
+                      : 'false'
+                    : ''
+                }
                 onChange={(e) => {
                   const val = e.target.value === '' ? undefined : e.target.value === 'true';
                   setFormData({ ...formData, ortodoncia_previa: val });
                 }}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('ortodoncia_previa')}
               >
                 <option value="">No especificado</option>
                 <option value="true">Sí</option>
@@ -431,7 +466,7 @@ const PacienteForm = ({
                 name="ultima_visita_dentista"
                 value={formData.ultima_visita_dentista}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('ultima_visita_dentista')}
               />
             </div>
             <div>
@@ -440,7 +475,7 @@ const PacienteForm = ({
                 name="sensibilidad_dental"
                 value={formData.sensibilidad_dental}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('sensibilidad_dental')}
               >
                 <option value="">Ninguna</option>
                 <option value="Frío">Frío</option>
@@ -453,9 +488,9 @@ const PacienteForm = ({
         </div>
       )}
 
-      {/* ====== BLOQUE VETERINARIA ====== */}
+      {/* ============ BLOQUE VETERINARIA ============ */}
       {isVeterinaria && (
-        <div className="border-t border-gray-700 pt-4 mt-2">
+        <div className="border-t border-gray-700 p-2">
           <h3 className="text-sm font-semibold text-gray-300 mb-3">Datos de la Mascota</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -465,18 +500,13 @@ const PacienteForm = ({
                 name="nombre"
                 value={formData.nombre}
                 onChange={handleChange}
-                className={`w-full px-3 py-2 bg-gray-700 border ${errors.nombre ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white`}
+                className={inputClass('nombre')}
               />
               {errors.nombre && <p className="text-red-400 text-xs mt-1">{errors.nombre}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Especie</label>
-              <select
-                name="especie"
-                value={formData.especie}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              >
+              <select name="especie" value={formData.especie} onChange={handleChange} className={inputClass('especie')}>
                 <option value="">Seleccionar</option>
                 <option value="Canino">Canino</option>
                 <option value="Felino">Felino</option>
@@ -489,39 +519,13 @@ const PacienteForm = ({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Raza</label>
-              <input
-                type="text"
-                name="raza"
-                value={formData.raza}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              />
+              <input type="text" name="raza" value={formData.raza} onChange={handleChange} className={inputClass('raza')} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Sexo</label>
-              <select
-                name="genero"
-                value={formData.genero}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              >
+              <select name="genero" value={formData.genero} onChange={handleChange} className={inputClass('genero')}>
                 <option value="M">Macho</option>
                 <option value="F">Hembra</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Estado Reproductivo</label>
-              <select
-                name="estado_reproductivo"
-                value={formData.estado_reproductivo}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              >
-                <option value="">Seleccionar</option>
-                <option value="Castrado">Castrado</option>
-                <option value="Entero">Entero</option>
-                <option value="Gestante">Gestante</option>
-                <option value="Lactante">Lactante</option>
               </select>
             </div>
             <div>
@@ -531,32 +535,34 @@ const PacienteForm = ({
                 name="fecha_nacimiento"
                 value={formData.fecha_nacimiento}
                 onChange={handleChange}
-                className={`w-full px-3 py-2 bg-gray-700 border ${errors.fecha_nacimiento ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white`}
+                className={inputClass('fecha_nacimiento')}
               />
-              {errors.fecha_nacimiento && <p className="text-red-400 text-xs mt-1">{errors.fecha_nacimiento}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Color / Pelaje / Señas</label>
-              <input
-                type="text"
-                name="color"
-                value={formData.color}
+              <label className="block text-sm font-medium text-gray-300 mb-1">Estado Reproductivo</label>
+              <select
+                name="estado_reproductivo"
+                value={formData.estado_reproductivo}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              />
+                className={inputClass('estado_reproductivo')}
+              >
+                <option value="">Seleccionar</option>
+                <option value="Castrado">Castrado</option>
+                <option value="Entero">Entero</option>
+                <option value="Gestante">Gestante</option>
+                <option value="Lactante">Lactante</option>
+              </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Chip / Tatuaje / Identificación</label>
-              <input
-                type="text"
-                name="chip"
-                value={formData.chip}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              />
+              <label className="block text-sm font-medium text-gray-300 mb-1">Color / Pelaje</label>
+              <input type="text" name="color" value={formData.color} onChange={handleChange} className={inputClass('color')} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Peso (kg)</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Chip / Tatuaje</label>
+              <input type="text" name="chip" value={formData.chip} onChange={handleChange} className={inputClass('chip')} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Peso (kg) *</label>
               <input
                 type="number"
                 step="0.1"
@@ -564,7 +570,7 @@ const PacienteForm = ({
                 name="peso"
                 value={formData.peso}
                 onChange={handleChange}
-                className={`w-full px-3 py-2 bg-gray-700 border ${errors.peso ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white`}
+                className={inputClass('peso')}
               />
               {errors.peso && <p className="text-red-400 text-xs mt-1">{errors.peso}</p>}
             </div>
@@ -574,7 +580,7 @@ const PacienteForm = ({
                 name="tipo_alimentacion"
                 value={formData.tipo_alimentacion}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('tipo_alimentacion')}
               >
                 <option value="">Seleccionar</option>
                 <option value="Concentrado/Croquetas">Concentrado/Croquetas</option>
@@ -584,12 +590,7 @@ const PacienteForm = ({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Hábitat / Estilo de Vida</label>
-              <select
-                name="habitat"
-                value={formData.habitat}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              >
+              <select name="habitat" value={formData.habitat} onChange={handleChange} className={inputClass('habitat')}>
                 <option value="">Seleccionar</option>
                 <option value="Interior/Casa">Interior/Casa</option>
                 <option value="Exterior/Patio">Exterior/Patio</option>
@@ -597,52 +598,55 @@ const PacienteForm = ({
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-300 mb-1">Señas particulares</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Señas Particulares</label>
               <textarea
                 name="senas_particulares"
                 value={formData.senas_particulares}
                 onChange={handleChange}
                 rows={2}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className={inputClass('senas_particulares')}
               />
             </div>
           </div>
         </div>
       )}
 
-      {/* ====== CAMPOS COMUNES PARA TODOS (PESO Y CHIP) ====== */}
-      {!isVeterinaria && (
-        <div className="border-t border-gray-700 pt-4 mt-2">
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">Datos Adicionales</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Peso (kg)</label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                name="peso"
-                value={formData.peso}
-                onChange={handleChange}
-                className={`w-full px-3 py-2 bg-gray-700 border ${errors.peso ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white`}
-              />
-              {errors.peso && <p className="text-red-400 text-xs mt-1">{errors.peso}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Chip / Tatuaje / Identificación</label>
-              <input
-                type="text"
-                name="chip"
-                value={formData.chip}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              />
-            </div>
+      {/* ============ CAMPOS COMUNES FINALES (Alergias, Antecedentes) ============ */}
+      <div className="border-t border-gray-700 p-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Alergias Conocidas</label>
+            <textarea
+              name="alergias"
+              value={formData.alergias}
+              onChange={handleChange}
+              rows={3}
+              placeholder={
+                isVeterinaria
+                  ? 'Alergias alimentarias, medicamentos...'
+                  : isDental
+                  ? 'Alergias a anestésicos, penicilina, látex...'
+                  : 'Medicamentos, alimentos, látex...'
+              }
+              className={inputClass('alergias')}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Antecedentes / Observaciones</label>
+            <textarea
+              name="antecedentes"
+              value={formData.antecedentes}
+              onChange={handleChange}
+              rows={3}
+              placeholder="Antecedentes relevantes..."
+              className={inputClass('antecedentes')}
+            />
           </div>
         </div>
-      )}
+      </div>
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
+      {/* BOTONES */}
+      <div className="flex justify-end gap-3 p-2 border-t border-gray-700">
         <button
           type="button"
           onClick={onCancel}

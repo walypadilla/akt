@@ -9,6 +9,11 @@ import { DashboardProvider } from './context/DashboardContext'; //
 import PrivateRoute from './components/common/PrivateRoute';
 import Layout from './components/layout/Layout';
 
+
+//Public
+import ResultadoPublico from './pages/public/ResultadoPublico';
+import CartillaPublica from './pages/public/CartillaPublica';
+
 // Auth
 import Login from './pages/auth/Login';
 import CambiarPassword from './pages/auth/CambiarPassword';
@@ -77,6 +82,8 @@ function App() {
 						{/* Ruta pública */}
 						<Route path='/login' element={<Login />} />
 						<Route path='/cambiar-password' element={<CambiarPassword />} />
+						<Route path="/resultado/:token" element={<ResultadoPublico />} />
+						<Route path="/cartilla/:token" element={<CartillaPublica />} />
 
 						{/* Ruta raíz con redirección dinámica */}
 						<Route path='/' element={<HomeRedirect />} />

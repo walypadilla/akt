@@ -137,7 +137,7 @@ exports.crearFactura = async (req, res) => {
     const organizacion_id = req.organizacion_id;
     
     // Obtener usuario_id
-    let usuario_id = req.user?.id;
+    let usuario_id = req.usuario_id;
     if (!usuario_id) {
       const [admin] = await connection.query(
         'SELECT id FROM usuarios WHERE organizacion_id = ? AND rol = "Admin" LIMIT 1',

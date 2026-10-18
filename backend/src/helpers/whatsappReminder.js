@@ -39,7 +39,7 @@ cron.schedule('*/30 * * * *', async () => {
         if (limiteCheck.allowed) {
           const fechaFormateada = new Date(cita.fecha_hora).toLocaleString('es-SV');
           const mensaje = `Recordatorio: su cita para ${cita.paciente_nombre} es en 2 horas (${fechaFormateada}). Atenderá ${cita.medico_nombre}.`;
-          await enviarWhatsApp(cita.telefono_whatsapp, mensaje);
+          await enviarWhatsApp(cita.telefono_whatsapp, mensaje, cita.organizacion_id, 'Recordatorio_Cita', cita.id);
 
           // Marcar como enviado
           await pool.query(

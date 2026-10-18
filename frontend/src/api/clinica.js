@@ -1,5 +1,22 @@
 import apiClient from './config';
 
+// ========== HELPERS DE URLs ==========
+export const API_ORIGIN = (() => {
+  // Vite expone VITE_API_URL o cae al default
+  const url = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  return url.replace(/\/api\/?$/, '');
+})();
+
+/**
+ * Construye la URL completa para un archivo servido por el backend
+ * Ej: /uploads/examenes/img.jpg → http://localhost:3000/uploads/examenes/img.jpg
+ */
+export const buildFileUrl = (path) => {
+  if (!path) return null;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_ORIGIN}${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
 // ========== MÉDICOS ==========
 export const getMedicos = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
@@ -39,23 +56,35 @@ export const exportarMedicosTodos = async () => {
   return response.data;
 };
 
-export const exportarMedicosFiltrados = async (params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  const response = await apiClient.get(`/organization/medicos/exportar/filtrados?${query}`, {
-    responseType: 'blob',
-  });
-  return response.data;
+export const exportarMedicosFiltrados = async (filtros) => {
+    const params = new URLSearchParams(filtros);
+    const response = await apiClient.get(`/organization/medicos/exportar/filtrados?${params.toString()}`, {
+        responseType: 'blob', 
+    });
+    return response.data;
 };
 
-export const getMedicoDetalle = async (id, params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  const response = await apiClient.get(`/organization/medicos/${id}/detalle?${query}`);
-  return response.data;
+export const getMedicoDetalle = async (id, anio, mes) => {
+    const params = new URLSearchParams();
+    if (anio) params.append('anio', anio);
+    if (mes) params.append('mes', mes);
+    const response = await apiClient.get(`/organization/medicos/${id}/detalle?${params.toString()}`);
+    return response.data;
 };
 
 export const aniosDisponibles = async (id) => {
   const response = await apiClient.get(`/organization/medicos/${id}/anios`);
   return response.data;
+};
+
+export const getMedicosDisponibles = async () => {
+  const response = await apiClient.get('/organization/medicos/usuarios-disponibles');
+  return response.data;
+};
+
+export const getAniosMedicos = async () => {
+    const response = await apiClient.get('/organization/medicos/anios');
+    return response.data;
 };
 
 export const exportarConsultasMedico = async (id, params = {}) => {
@@ -146,6 +175,18 @@ export const updateCitaStatus = async (id, estado) => {
 };
 
 // ========== CONSULTAS ==========
+export const getAniosConsultas = async () => {
+  const response = await apiClient.get('/organization/consultas/anios');
+  return response.data;
+};
+
+export const getExamenesInternosConsulta = async (consultaId) => {
+  const response = await apiClient.get(
+    `/organization/consultas/${consultaId}/examenes-internos`
+  );
+  return response.data;
+};
+
 export const getConsultas = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
   const response = await apiClient.get(`/organization/consultas?${query}`);
@@ -199,6 +240,8 @@ export const guardarOdontograma = async (data) => {
   return response.data;
 };
 
+// ======== EXAMENES ======================================
+
 export const getExamenes = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
   const response = await apiClient.get(`/organization/examenes?${query}`);
@@ -217,6 +260,11 @@ export const updateExamen = async (id, data) => {
 
 export const deleteExamen = async (id) => {
   const response = await apiClient.delete(`/organization/examenes/${id}`);
+  return response.data;
+};
+
+export const reactivarExamen = async (id) => {
+  const response = await apiClient.put(`/organization/examenes/${id}/reactivar`);
   return response.data;
 };
 
@@ -247,9 +295,77 @@ export const getExamenesPendientes = async () => {
   return response.data;
 };
 
-// ========== VACUNAS ==========
-export const getVacunas = async () => {
-  const response = await apiClient.get('/organization/vacunas');
+export const generarExamenPDF = async (id) => {
+  const response = await apiClient.get(`/organization/solicitudes-examen/${id}/pdf`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
+export const getDashboardExamenes = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(
+    `/organization/examenes/dashboard${query ? `?${query}` : ''}`
+  );
+  return response.data;
+};
+
+export const getEstadoWhatsApp = async () => {
+  const response = await apiClient.get('/organization/examenes/whatsapp-estado');
+  return response.data;
+};
+
+export const exportarSolicitudesExamen = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(
+    `/organization/solicitudes-examen/exportar/filtrados?${query}`,
+    { responseType: 'blob' }
+  );
+  return response.data;
+};
+
+export const enviarResultadoWhatsApp = async (id) => {
+  const response = await apiClient.post(`/organization/solicitudes-examen/${id}/whatsapp`);
+  return response.data;
+};
+
+export const subirArchivoResultado = async (id, file) => {
+  const formData = new FormData();
+  formData.append('archivo', file);
+  const response = await apiClient.post(
+    `/organization/solicitudes-examen/${id}/archivo`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } }
+  );
+  return response.data;
+};
+
+export const getAniosExamenes = async () => {
+  const response = await apiClient.get('/organization/examenes/anios');
+  return response.data;
+};
+
+export const exportarCatalogoExamenes = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(
+    `/organization/examenes/exportar/catalogo?${query}`,
+    { responseType: 'blob' }
+  );
+  return response.data;
+};
+
+
+// ========== VACUNAS ==========// ========== VACUNAS ==========
+export const getVacunas = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(`/organization/vacunas?${query}`);
+  return response.data;
+};
+
+export const getVacunasAplicadasConsulta = async (consultaId) => {
+  const response = await apiClient.get(
+    `/organization/consultas/${consultaId}/vacunas-aplicadas`
+  );
   return response.data;
 };
 
@@ -268,8 +384,18 @@ export const deleteVacuna = async (id) => {
   return response.data;
 };
 
+export const reactivarVacuna = async (id) => {
+  const response = await apiClient.put(`/organization/vacunas/${id}/reactivar`);
+  return response.data;
+};
+
 export const getHistorialVacunas = async (paciente_id) => {
   const response = await apiClient.get(`/organization/vacunas/historial/${paciente_id}`);
+  return response.data;
+};
+
+export const getCartillaPaciente = async (paciente_id) => {
+  const response = await apiClient.get(`/organization/vacunas/cartilla/${paciente_id}`);
   return response.data;
 };
 
@@ -283,3 +409,51 @@ export const getProximasVacunas = async (params = {}) => {
   const response = await apiClient.get(`/organization/vacunas/proximas?${query}`);
   return response.data;
 };
+
+export const getDashboardVacunas = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(`/organization/vacunas/dashboard?${query}`);
+  return response.data;
+};
+
+export const getAniosVacunas = async () => {
+  const response = await apiClient.get('/organization/vacunas/anios');
+  return response.data;
+};
+
+export const exportarVacunas = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(`/organization/vacunas/exportar/filtrados?${query}`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
+export const generarPDFCartilla = async (paciente_id) => {
+  const response = await apiClient.get(`/organization/vacunas/cartilla/${paciente_id}/pdf`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
+export const generarTokenCartilla = async (paciente_id) => {
+  const response = await apiClient.post(`/organization/vacunas/cartilla/${paciente_id}/token`);
+  return response.data;
+};
+
+export const getHistorialGlobalVacunas = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(`/organization/vacunas/historial-global?${query}`);
+  return response.data;
+};
+
+export const exportarTopVacunas = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(`/organization/vacunas/exportar/top5?${query}`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
+// Obtener la URL base del frontend para construir links públicos
+export const FRONTEND_URL = window.location.origin;
