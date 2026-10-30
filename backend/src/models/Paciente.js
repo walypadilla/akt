@@ -2,6 +2,7 @@ const { pool } = require('../config/db');
 
 class Paciente {
   static async findAll(organizacion_id, filters = {}, page = 1, limit = 10) {
+    // 1. Consulta principal
     let sql = `
       SELECT p.*, c.nombre AS cliente_nombre
       FROM pacientes p
@@ -11,14 +12,13 @@ class Paciente {
     const params = [organizacion_id];
 
     if (filters.search) {
-      sql += ' AND (p.nombre LIKE ? OR p.apellidos LIKE ?)';
-      params.push(`%${filters.search}%`, `%${filters.search}%`);
+      sql += ' AND (p.nombre LIKE ? OR p.apellidos LIKE ? OR p.dui LIKE ? OR c.nombre LIKE ?)';
+      params.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`);
     }
     if (filters.dui) {
       sql += ' AND p.dui LIKE ?';
       params.push(`%${filters.dui}%`);
     }
-    // Filtro por sexo (genero)
     if (filters.sexo) {
       sql += ' AND p.genero = ?';
       params.push(filters.sexo);
@@ -27,8 +27,6 @@ class Paciente {
       sql += ' AND p.activo = 1';
     } else if (filters.activo === 'false') {
       sql += ' AND p.activo = 0';
-    } else if (!filters.activo || filters.activo === '') {
-      sql += ' AND p.activo = 1';
     }
 
     sql += ' ORDER BY p.nombre ASC';
@@ -37,12 +35,18 @@ class Paciente {
 
     const [rows] = await pool.query(sql, params);
 
-    // Conteo total con los mismos filtros
-    let countSql = 'SELECT COUNT(*) AS total FROM pacientes p WHERE p.organizacion_id = ?';
+    // 2. Consulta de Conteo (AQUÍ ESTABA EL ERROR: faltaba el LEFT JOIN clientes c)
+    let countSql = `
+      SELECT COUNT(*) AS total 
+      FROM pacientes p 
+      LEFT JOIN clientes c ON p.cliente_id = c.id 
+      WHERE p.organizacion_id = ?
+    `;
     const countParams = [organizacion_id];
+
     if (filters.search) {
-      countSql += ' AND (p.nombre LIKE ? OR p.apellidos LIKE ?)';
-      countParams.push(`%${filters.search}%`, `%${filters.search}%`);
+      countSql += ' AND (p.nombre LIKE ? OR p.apellidos LIKE ? OR p.dui LIKE ? OR c.nombre LIKE ?)';
+      countParams.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`);
     }
     if (filters.dui) {
       countSql += ' AND p.dui LIKE ?';
@@ -56,8 +60,6 @@ class Paciente {
       countSql += ' AND p.activo = 1';
     } else if (filters.activo === 'false') {
       countSql += ' AND p.activo = 0';
-    } else if (!filters.activo || filters.activo === '') {
-      countSql += ' AND p.activo = 1';
     }
 
     const [countResult] = await pool.query(countSql, countParams);

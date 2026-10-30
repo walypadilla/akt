@@ -47,6 +47,7 @@ import {
   BarChart2,
   Settings,
   RotateCcw,
+  ChevronDown
 } from 'lucide-react';
 import {
   LineChart,
@@ -59,7 +60,13 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
+const MESES = [
+  'Enero','Febrero','Marzo','Abril','Mayo','Junio',
+  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre',
+];
+
 const Payroll = () => {
+  const hoy = new Date();
   const [payrolls, setPayrolls] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [paginacion, setPaginacion] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -68,19 +75,22 @@ const Payroll = () => {
   const tableRef = useRef(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState(null);
 
   const [filtros, setFiltros] = useState({
-    mes: '',
-    anio: new Date().getFullYear(),
+    mes: hoy.getMonth() + 1,
+    anio: hoy.getFullYear(),
     estado: '',
     empleado_id: '',
+    search: '',
     page: 1,
     limit: 10,
   });
   const [filtrosTemp, setFiltrosTemp] = useState({ ...filtros });
 
-  const [aniosDisponibles, setAniosDisponibles] = useState([]);
-  const [anioSeleccionado, setAnioSeleccionado] = useState(new Date().getFullYear());
+  const [aniosDisponibles, setAniosDisponibles] = useState([hoy.getFullYear()]);
+  const [anioSeleccionado, setAnioSeleccionado] = useState(hoy.getFullYear());
+  const [mesSeleccionado, setMesSeleccionado] = useState(hoy.getMonth() + 1);
 
   // Modales
   const [showHorasExtrasModal, setShowHorasExtrasModal] = useState(false);
@@ -100,8 +110,8 @@ const Payroll = () => {
 
   const [horasExtrasData, setHorasExtrasData] = useState({
     empleado_id: '',
-    mes: new Date().getMonth() + 1,
-    anio: new Date().getFullYear(),
+    mes: hoy.getMonth() + 1,
+    anio: hoy.getFullYear(),
     horas: 0,
     descripcion: '',
   });
@@ -124,8 +134,8 @@ const Payroll = () => {
     totalISSSPatronal: 0,
     totalAFPPatronal: 0,
     totalAguinaldos: 0,
-    mesActual: new Date().getMonth() + 1,
-    anioActual: new Date().getFullYear(),
+    mesActual: hoy.getMonth() + 1,
+    anioActual: hoy.getFullYear(),
   });
 
   const [datosGrafica, setDatosGrafica] = useState([]);
@@ -171,9 +181,11 @@ const Payroll = () => {
     try {
       const params = {
         ...filtros,
+        mes: mesSeleccionado,
         anio: anioSeleccionado,
       };
       if (!params.estado) delete params.estado;
+      if (!params.mes) delete params.mes;
       
       const payrollsData = await getPayrolls(params);
       setPayrolls(payrollsData.planillas || []);
@@ -190,14 +202,10 @@ const Payroll = () => {
       const totalISSSPatronal = planillas.reduce((acc, p) => acc + parseFloat(p.isss_patronal || 0), 0);
       const totalAFPPatronal = planillas.reduce((acc, p) => acc + parseFloat(p.afp_patronal || 0), 0);
 
-      const hoy = new Date();
-      const mesActual = hoy.getMonth() + 1;
-      const anioActual = hoy.getFullYear();
-      const ausenciasData = await obtenerAusencias({ mes: mesActual, anio: anioActual });
-      const ausenciasMes = ausenciasData ? ausenciasData.length : 0;
+      const ausenciasDataRes = await obtenerAusencias({ mes: mesSeleccionado, anio: anioSeleccionado });
+      const ausenciasMes = ausenciasDataRes ? ausenciasDataRes.length : 0;
 
-      // Calculamos los aguinaldos trayéndolos de su respectiva base de datos
-      const aguinaldosData = await obtenerAguinaldos({ anio: anioActual });
+      const aguinaldosData = await obtenerAguinaldos({ anio: anioSeleccionado });
       const totalAguinaldos = (aguinaldosData || []).reduce((acc, a) => acc + (a.estado === 'Pagado' ? parseFloat(a.monto || 0) : 0), 0);
 
       setResumen({
@@ -209,11 +217,11 @@ const Payroll = () => {
         totalISSSPatronal,
         totalAFPPatronal,
         totalAguinaldos, 
-        mesActual,
-        anioActual,
+        mesActual: mesSeleccionado,
+        anioActual: anioSeleccionado,
       });
 
-      // Gráfica solo con planillas pagadas
+      // Gráfica
       const meses = {};
       planillas.forEach(p => {
         if (p.estado !== 'Pagada') return;
@@ -250,7 +258,7 @@ const Payroll = () => {
 
   useEffect(() => {
     loadData();
-  }, [filtros.page, filtros.mes, filtros.estado, filtros.empleado_id, anioSeleccionado]);
+  }, [filtros.page, filtros.estado, filtros.empleado_id, mesSeleccionado, anioSeleccionado]);
 
   useEffect(() => {
     cargarEstadoGeneracion();
@@ -277,14 +285,19 @@ const Payroll = () => {
   };
 
   const limpiarFiltros = () => {
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
     const filtrosLimpios = {
-      mes: '',
-      anio: new Date().getFullYear(),
+      mes: currentMonth,
+      anio: currentYear,
       estado: '',
       empleado_id: '',
+      search: '',
       page: 1,
       limit: 10,
     };
+    setMesSeleccionado(currentMonth);
+    setAnioSeleccionado(currentYear);
     setFiltros(filtrosLimpios);
     setFiltrosTemp(filtrosLimpios);
   };
@@ -295,10 +308,20 @@ const Payroll = () => {
     }
   };
 
+  const volverMesActual = () => {
+    const h = new Date();
+    const m = h.getMonth() + 1;
+    const a = h.getFullYear();
+    setMesSeleccionado(m);
+    setAnioSeleccionado(a);
+    setFiltros(prev => ({ ...prev, mes: m, anio: a, page: 1 }));
+    setFiltrosTemp(prev => ({ ...prev, mes: m, anio: a }));
+  };
+
   const getTablaTitle = () => {
     const partes = [];
-    if (filtros.mes) partes.push(`Mes: ${new Date(2024, parseInt(filtros.mes) - 1).toLocaleString('es', { month: 'long' })}`);
-    if (filtros.anio) partes.push(`Año: ${filtros.anio}`);
+    if (mesSeleccionado) partes.push(`Mes: ${MESES[mesSeleccionado - 1]}`);
+    if (anioSeleccionado) partes.push(`Año: ${anioSeleccionado}`);
     if (filtros.estado) partes.push(`Estado: ${filtros.estado}`);
     if (filtros.empleado_id) {
       const emp = empleados.find(e => e.id === parseInt(filtros.empleado_id));
@@ -314,8 +337,8 @@ const Payroll = () => {
 
   // Acciones
   const handleGenerateMasiva = () => {
-    const mesNombre = new Date(2024, new Date().getMonth()).toLocaleString('es', { month: 'long' });
-    const anio = new Date().getFullYear();
+    const mesNombre = MESES[mesSeleccionado - 1];
+    const anio = anioSeleccionado;
     const periodoTexto = periodoPagoGlobal === 'Quincenal' 
       ? (estadoGeneracion.periodoActual === 1 ? 'primera quincena' : 'segunda quincena')
       : 'mensual';
@@ -331,8 +354,8 @@ const Payroll = () => {
         try {
           setSaving(true);
           const result = await generatePayrollMasiva({
-            mes: new Date().getMonth() + 1,
-            anio: new Date().getFullYear(),
+            mes: mesSeleccionado,
+            anio: anioSeleccionado,
             tipo_periodo: periodoPagoGlobal,
           });
           toast.success(result.message || 'Planillas masivas generadas');
@@ -431,7 +454,7 @@ const Payroll = () => {
 
   const handleExportar = async () => {
     try {
-      const params = { ...filtros, anio: anioSeleccionado };
+      const params = { ...filtros, mes: mesSeleccionado, anio: anioSeleccionado };
       const blob = await exportarPlanillas(params);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -463,8 +486,8 @@ const Payroll = () => {
   const abrirHorasExtras = () => {
     setHorasExtrasData({
       empleado_id: '',
-      mes: new Date().getMonth() + 1,
-      anio: new Date().getFullYear(),
+      mes: mesSeleccionado,
+      anio: anioSeleccionado,
       horas: 0,
       descripcion: '',
     });
@@ -486,10 +509,11 @@ const Payroll = () => {
   const verAusencias = async (empleadoId = null) => {
     setLoadingAusencias(true);
     try {
-      const params = {};
+      const params = {
+        mes: mesSeleccionado,
+        anio: anioSeleccionado
+      };
       if (empleadoId) params.empleado_id = empleadoId;
-      if (filtros.mes) params.mes = filtros.mes;
-      if (filtros.anio) params.anio = filtros.anio;
       const data = await obtenerAusencias(params);
       setAusenciasData(data || []);
       setShowVerAusenciasModal(true);
@@ -517,9 +541,7 @@ const Payroll = () => {
 
   const exportarAusenciasCSV = async () => {
     try {
-      const params = {};
-      if (filtros.mes) params.mes = filtros.mes;
-      if (filtros.anio) params.anio = filtros.anio;
+      const params = { mes: mesSeleccionado, anio: anioSeleccionado };
       const blob = await exportarAusencias(params);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -535,9 +557,7 @@ const Payroll = () => {
 
   const exportarHorasExtrasCSV = async () => {
     try {
-      const params = {};
-      if (filtros.mes) params.mes = filtros.mes;
-      if (filtros.anio) params.anio = filtros.anio;
+      const params = { mes: mesSeleccionado, anio: anioSeleccionado };
       const blob = await exportarHorasExtras(params);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -613,7 +633,7 @@ const Payroll = () => {
           toast.success(`${idsValidos.length} planillas actualizadas a ${estado}`);
           setSelectedPlanillas([]);
           setSelectAll(false);
-          loadData(); // ← Recargar tabla
+          loadData();
         } catch (err) {
           toast.error(err.response?.data?.message || 'Error al cambiar estado');
         }
@@ -624,7 +644,7 @@ const Payroll = () => {
 
   // Aguinaldos
   const handleGenerarAguinaldos = async () => {
-    const anio = new Date().getFullYear();
+    const anio = anioSeleccionado;
     setConfirmModal({
       isOpen: true,
       title: 'Generar Aguinaldos',
@@ -653,12 +673,10 @@ const Payroll = () => {
     });
   };
 
-
   const cargarAguinaldos = async () => {
     try {
       setLoadingAguinaldos(true);
-      const anio = new Date().getFullYear();
-      const data = await obtenerAguinaldos({ anio });
+      const data = await obtenerAguinaldos({ anio: anioSeleccionado });
       setAguinaldos(data);
       setShowAguinaldosModal(true);
     } catch (err) {
@@ -670,12 +688,11 @@ const Payroll = () => {
 
   const handleExportarAguinaldos = async () => {
     try {
-      const anio = new Date().getFullYear();
-      const blob = await exportarAguinaldos({ anio });
+      const blob = await exportarAguinaldos({ anio: anioSeleccionado });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `aguinaldos_${anio}.csv`;
+      a.download = `aguinaldos_${anioSeleccionado}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success('Reporte de aguinaldos exportado');
@@ -713,8 +730,7 @@ const Payroll = () => {
         try {
           await cambiarEstadoAguinaldosMultiple(selectedAguinaldos, 'Pagado');
           toast.success('Aguinaldos pagados');
-          const anio = new Date().getFullYear();
-          const data = await obtenerAguinaldos({ anio });
+          const data = await obtenerAguinaldos({ anio: anioSeleccionado });
           setAguinaldos(data);
           
           const totalAguinaldosPagados = data.reduce((acc, a) => 
@@ -724,7 +740,6 @@ const Payroll = () => {
           
           setSelectedAguinaldos([]);
           setSelectAllAguinaldos(false);
-          // Recargar tabla para otros datos (planillas, etc.)
           loadData();
         } catch (err) {
           toast.error(err.response?.data?.message || 'Error al pagar aguinaldos');
@@ -758,7 +773,7 @@ const Payroll = () => {
 
   const { total, page, totalPages } = paginacion;
   const tieneFiltrosActivos = Object.values(filtros).some(v => v && v !== '' && v !== 1 && v !== false);
-  const nombreMes = new Date(2024, resumen.mesActual - 1).toLocaleString('es', { month: 'long' });
+  const nombreMes = MESES[mesSeleccionado - 1];
 
   return (
     <div className="p-6 space-y-6">
@@ -779,23 +794,7 @@ const Payroll = () => {
             <Settings size={14} />
             Pago: {periodoPagoGlobal}
           </button>
-          <div className="flex items-center gap-2 bg-gray-900/50 px-3 py-1.5 rounded-lg border border-gray-700">
-            <Calendar className="w-4 h-4 text-purple-400" />
-            <span className="text-xs text-gray-300 font-semibold">Año Fiscal:</span>
-            {aniosDisponibles.length > 0 && (
-              <select
-                value={anioSeleccionado}
-                onChange={(e) => setAnioSeleccionado(parseInt(e.target.value))}
-                className="bg-transparent border-none text-white text-sm font-bold focus:outline-none focus:ring-0 cursor-pointer"
-              >
-                {aniosDisponibles.map((year) => (
-                  <option key={year} value={year} className="bg-gray-800">
-                    {year}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+
           <button
             onClick={handleExportar}
             title="Exportar planillas a CSV"
@@ -832,6 +831,36 @@ const Payroll = () => {
             <Calendar size={14} /> Aguinaldos
           </button>
         </div>
+      </div>
+
+      {/* APARTADO PERÍODO DEL RESUMEN (ESTILO EXÁMENES) */}
+      <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3 flex flex-wrap items-center gap-3">
+        <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
+          <Calendar size={14} className="text-purple-400" /> Período del resumen
+        </span>
+        <select
+          value={anioSeleccionado}
+          onChange={(e) => setAnioSeleccionado(parseInt(e.target.value))}
+          className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white"
+        >
+          {aniosDisponibles.map((a) => <option key={a} value={a}>Año: {a}</option>)}
+        </select>
+        <select
+          value={mesSeleccionado}
+          onChange={(e) => setMesSeleccionado(parseInt(e.target.value))}
+          className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white"
+        >
+          {MESES.map((n, i) => <option key={i + 1} value={i + 1}>{n}</option>)}
+        </select>
+        <button 
+          onClick={volverMesActual} 
+          className="text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 font-semibold transition"
+        >
+          Mes Actual
+        </button>
+        <span className="text-xs text-gray-400 ml-auto italic">
+          Mostrando: {MESES[mesSeleccionado - 1]} {anioSeleccionado}
+        </span>
       </div>
 
       {/* KPIs */}
@@ -874,12 +903,7 @@ const Payroll = () => {
         </div>
         <div
           className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700 flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 transition"
-          onClick={() => {
-            const hoy = new Date();
-            setFiltros({ ...filtros, mes: hoy.getMonth() + 1, anio: hoy.getFullYear(), page: 1 });
-            setFiltrosTemp({ ...filtrosTemp, mes: hoy.getMonth() + 1, anio: hoy.getFullYear() });
-            verAusencias();
-          }}
+          onClick={() => verAusencias()}
           title={`Ausencias registradas en ${nombreMes} ${resumen.anioActual}`}
         >
           <Calendar className="w-8 h-8 text-purple-400" />
@@ -890,11 +914,6 @@ const Payroll = () => {
         </div>
         <div
           className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700 flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 transition"
-          onClick={() => {
-            const hoy = new Date();
-            setFiltros({ ...filtros, mes: hoy.getMonth() + 1, anio: hoy.getFullYear(), page: 1 });
-            setFiltrosTemp({ ...filtrosTemp, mes: hoy.getMonth() + 1, anio: hoy.getFullYear() });
-          }}
           title={`ISSS Patronal del mes (${nombreMes})`}
         >
           <DollarSign className="w-8 h-8 text-cyan-400" />
@@ -905,11 +924,6 @@ const Payroll = () => {
         </div>
         <div
           className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700 flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 transition"
-          onClick={() => {
-            const hoy = new Date();
-            setFiltros({ ...filtros, mes: hoy.getMonth() + 1, anio: hoy.getFullYear(), page: 1 });
-            setFiltrosTemp({ ...filtrosTemp, mes: hoy.getMonth() + 1, anio: hoy.getFullYear() });
-          }}
           title={`AFP Patronal del mes (${nombreMes})`}
         >
           <DollarSign className="w-8 h-8 text-indigo-400" />
@@ -1003,18 +1017,6 @@ const Payroll = () => {
               )}
             </div>
             <select
-              value={filtrosTemp.mes}
-              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, mes: e.target.value })}
-              className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              <option value="">Todos los meses</option>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>
-                  {new Date(2024, m - 1).toLocaleString('es', { month: 'long' })}
-                </option>
-              ))}
-            </select>
-            <select
               value={filtrosTemp.estado}
               onChange={(e) => setFiltrosTemp({ ...filtrosTemp, estado: e.target.value })}
               className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -1045,7 +1047,7 @@ const Payroll = () => {
         )}
       </div>
 
-      {/* TABLA */}
+      {/* TABLA DE PLANILLAS */}
       <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 overflow-hidden">
         <div className="px-4 py-2.5 border-b border-gray-700/80 bg-gray-800/40 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -1093,11 +1095,11 @@ const Payroll = () => {
           )}
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div ref={tableRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-center">
+                <th className="px-2 py-1.5 text-center">
                   <input
                     type="checkbox"
                     checked={selectAll}
@@ -1105,19 +1107,19 @@ const Payroll = () => {
                     className="w-4 h-4 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
                   />
                 </th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Empleado</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Período</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Tipo</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Días Trab.</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Horas Extras</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">ISSS</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">AFP</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Renta</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">ISSS Patr.</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">AFP Patr.</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Neto</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Empleado</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Período</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Tipo</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Días Trab.</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Horas Extras</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">ISSS</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">AFP</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Renta</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">ISSS Patr.</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">AFP Patr.</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Neto</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -1129,11 +1131,15 @@ const Payroll = () => {
                   </td>
                 </tr>
               ) : (
-                payrolls.map((p) => {
+                payrolls.map((p, index) => {
                   const isDisabled = p.estado === 'Pagada' || p.estado === 'Anulada';
+                  // Abre hacia arriba si es de las últimas 2 filas Y hay más de 4 registros.
+                  // Si hay 1 o 2 filas, la altura fija (min-h-[380px]) permite abrir hacia abajo holgadamente.
+                  const esUltimaFila = index >= payrolls.length - 2 && payrolls.length > 4;
+
                   return (
                     <tr key={p.id} className="hover:bg-gray-700/30 transition-colors">
-                      <td className="px-2 py-1.5 text-center">
+                      <td className="px-2 py-1 text-center">
                         <input
                           type="checkbox"
                           checked={selectedPlanillas.includes(p.id)}
@@ -1142,18 +1148,18 @@ const Payroll = () => {
                           className="w-4 h-4 bg-gray-700 border-gray-600 rounded focus:ring-purple-500 disabled:opacity-50"
                         />
                       </td>
-                      <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{p.empleado_nombre}</td>
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.mes}/{p.anio}</td>
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.tipo_periodo || 'Mensual'}</td>
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.dias_trabajados}</td>
-                      <td className="px-2 py-1.5 text-amber-400 font-bold whitespace-nowrap">${parseFloat(p.horas_extras_monto || 0).toFixed(2)}</td>
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">${parseFloat(p.descuento_isss || 0).toFixed(2)}</td>
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">${parseFloat(p.descuento_afp || 0).toFixed(2)}</td>
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">${parseFloat(p.descuento_renta || 0).toFixed(2)}</td>
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">${parseFloat(p.isss_patronal || 0).toFixed(2)}</td>
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">${parseFloat(p.afp_patronal || 0).toFixed(2)}</td>
-                      <td className="px-2 py-1.5 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(p.salario_neto_pagar || 0).toFixed(2)}</td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">
+                      <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">{p.empleado_nombre}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.mes}/{p.anio}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.tipo_periodo || 'Mensual'}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.dias_trabajados}</td>
+                      <td className="px-2 py-1 text-amber-400 font-bold whitespace-nowrap">${parseFloat(p.horas_extras_monto || 0).toFixed(2)}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">${parseFloat(p.descuento_isss || 0).toFixed(2)}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">${parseFloat(p.descuento_afp || 0).toFixed(2)}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">${parseFloat(p.descuento_renta || 0).toFixed(2)}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">${parseFloat(p.isss_patronal || 0).toFixed(2)}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">${parseFloat(p.afp_patronal || 0).toFixed(2)}</td>
+                      <td className="px-2 py-1 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(p.salario_neto_pagar || 0).toFixed(2)}</td>
+                      <td className="px-2 py-1 whitespace-nowrap">
                         {p.estado === 'Pagada' ? (
                           <span className="text-emerald-400 font-semibold">Pagada</span>
                         ) : p.estado === 'Cerrada' ? (
@@ -1164,68 +1170,105 @@ const Payroll = () => {
                           <span className="text-rose-400 font-semibold">Borrador</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="px-2 py-1 text-center whitespace-nowrap relative">
+                        {/* MENÚ FLOTANTE ACCIONES DESPLEGABLE */}
+                        <div className="relative group inline-block text-left" onMouseLeave={() => setOpenDropdownId(null)}>
                           <button
-                            onClick={() => handleGenerarBoleta(p.id)}
-                            title="Generar boleta PDF"
-                            className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold transition"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenDropdownId(openDropdownId === `p-${p.id}` ? null : `p-${p.id}`);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-gray-300 bg-gray-700/60 border border-gray-600 rounded-lg hover:bg-gray-700 hover:text-white transition-colors focus:outline-none"
                           >
-                            <FileText size={12} />
+                            Acciones
+                            <ChevronDown 
+                              size={14} 
+                              className={`transition-transform duration-200 ${
+                                openDropdownId === `p-${p.id}`
+                                  ? esUltimaFila ? 'rotate-0' : 'rotate-180' 
+                                  : esUltimaFila ? 'rotate-180 group-hover:rotate-0' : 'group-hover:rotate-180'
+                              }`} 
+                            />
                           </button>
-                          <button
-                            onClick={() => verAusencias(p.empleado_id)}
-                            title="Ver ausencias del empleado"
-                            className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/30 rounded text-xs font-semibold transition"
+
+                          <div 
+                            className={`absolute right-0 w-52 transition-all duration-150 z-50 ${
+                              esUltimaFila ? 'bottom-full mb-1 origin-bottom-right' : 'top-full mt-1 origin-top-right'
+                            } ${
+                              openDropdownId === `p-${p.id}` ? 'opacity-100 visible' : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
+                            }`}
                           >
-                            <Eye size={12} />
-                          </button>
-                          <button
-                            onClick={() => verHorasExtras(p.periodo_id)}
-                            title="Ver horas extras del período"
-                            className="px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white border border-indigo-500/30 rounded text-xs font-semibold transition"
-                          >
-                            <BarChart2 size={12} />
-                          </button>
-                          {p.estado === 'Borrador' && (
-                            <>
+                            <div className="bg-gray-800 border border-gray-600/80 rounded-xl shadow-2xl p-1.5 space-y-1.5 backdrop-blur-md">
                               <button
-                                onClick={() => handleStatusChange(p.id, 'Cerrada')}
-                                title="Cerrar planilla"
-                                className="px-2 py-1 bg-yellow-600/10 hover:bg-yellow-600 text-yellow-400 hover:text-white border border-yellow-600/30 rounded text-xs font-semibold transition"
+                                onClick={() => { handleGenerarBoleta(p.id); setOpenDropdownId(null); }}
+                                className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-cyan-300 bg-cyan-500/10 hover:bg-cyan-600 hover:text-white border border-cyan-500/20 rounded-lg transition-all font-medium shadow-sm group/btn"
                               >
-                                <CheckCircle size={12} />
+                                <FileText size={14} className="text-cyan-400 group-hover/btn:text-white transition-colors" />
+                                <span>Generar boleta</span>
                               </button>
+
                               <button
-                                onClick={() => handleDelete(p.id)}
-                                title="Anular planilla"
-                                className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold transition"
+                                onClick={() => { verAusencias(p.empleado_id); setOpenDropdownId(null); }}
+                                className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-blue-300 bg-blue-500/10 hover:bg-blue-600 hover:text-white border border-blue-500/20 rounded-lg transition-all font-medium shadow-sm group/btn"
                               >
-                                <Trash2 size={12} />
+                                <Eye size={14} className="text-blue-400 group-hover/btn:text-white transition-colors" />
+                                <span>Ver ausencias</span>
                               </button>
-                            </>
-                          )}
-                          {p.estado === 'Cerrada' && (
-                            <button
-                              onClick={() => handleStatusChange(p.id, 'Pagada')}
-                              title="Marcar como pagada"
-                              className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold transition"
-                            >
-                              <CheckCircle size={12} />
-                            </button>
-                          )}
-                          {p.estado === 'Anulada' && (
-                            <button
-                              onClick={() => handleReabrirAnulada(p.id)}
-                              title="Reabrir planilla anulada (cambiar a Borrador)"
-                              className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/30 rounded text-xs font-semibold transition"
-                            >
-                              <RotateCcw size={12} />
-                            </button>
-                          )}
-                          {p.estado === 'Pagada' && (
-                            <span className="text-gray-500 text-xs italic">Bloqueada</span>
-                          )}
+
+                              <button
+                                onClick={() => { verHorasExtras(p.periodo_id); setOpenDropdownId(null); }}
+                                className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-indigo-300 bg-indigo-500/10 hover:bg-indigo-600 hover:text-white border border-indigo-500/20 rounded-lg transition-all font-medium shadow-sm group/btn"
+                              >
+                                <BarChart2 size={14} className="text-indigo-400 group-hover/btn:text-white transition-colors" />
+                                <span>Ver horas extras</span>
+                              </button>
+
+                              {p.estado === 'Borrador' && (
+                                <>
+                                  <button
+                                    onClick={() => { handleStatusChange(p.id, 'Cerrada'); setOpenDropdownId(null); }}
+                                    className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-yellow-300 bg-yellow-500/10 hover:bg-yellow-600 hover:text-white border border-yellow-500/20 rounded-lg transition-all font-medium shadow-sm group/btn"
+                                  >
+                                    <CheckCircle size={14} className="text-yellow-400 group-hover/btn:text-white transition-colors" />
+                                    <span>Cerrar planilla</span>
+                                  </button>
+                                  <button
+                                    onClick={() => { handleDelete(p.id); setOpenDropdownId(null); }}
+                                    className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-rose-300 bg-rose-500/10 hover:bg-rose-600 hover:text-white border border-rose-500/20 rounded-lg transition-all font-medium shadow-sm group/btn"
+                                  >
+                                    <Trash2 size={14} className="text-rose-400 group-hover/btn:text-white transition-colors" />
+                                    <span>Anular planilla</span>
+                                  </button>
+                                </>
+                              )}
+
+                              {p.estado === 'Cerrada' && (
+                                <button
+                                  onClick={() => { handleStatusChange(p.id, 'Pagada'); setOpenDropdownId(null); }}
+                                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-emerald-300 bg-emerald-500/10 hover:bg-emerald-600 hover:text-white border border-emerald-500/20 rounded-lg transition-all font-medium shadow-sm group/btn"
+                                >
+                                  <CheckCircle size={14} className="text-emerald-400 group-hover/btn:text-white transition-colors" />
+                                  <span>Pagar planilla</span>
+                                </button>
+                              )}
+
+                              {p.estado === 'Anulada' && (
+                                <button
+                                  onClick={() => { handleReabrirAnulada(p.id); setOpenDropdownId(null); }}
+                                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-left text-blue-300 bg-blue-500/10 hover:bg-blue-600 hover:text-white border border-blue-500/20 rounded-lg transition-all font-medium shadow-sm group/btn"
+                                >
+                                  <RotateCcw size={14} className="text-blue-400 group-hover/btn:text-white transition-colors" />
+                                  <span>Reabrir planilla</span>
+                                </button>
+                              )}
+
+                              {p.estado === 'Pagada' && (
+                                <div className="px-3 py-1 text-xs text-gray-400 italic">
+                                  Planilla Bloqueada
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -1320,10 +1363,8 @@ const Payroll = () => {
                     onChange={(e) => setHorasExtrasData({ ...horasExtrasData, mes: parseInt(e.target.value) })}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                      <option key={m} value={m}>
-                        {new Date(2024, m - 1).toLocaleString('es', { month: 'long' })}
-                      </option>
+                    {MESES.map((m, idx) => (
+                      <option key={idx + 1} value={idx + 1}>{m}</option>
                     ))}
                   </select>
                 </div>
@@ -1464,7 +1505,7 @@ const Payroll = () => {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-3xl w-full max-h-[90vh] flex flex-col p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-white">📋 Ausencias Registradas</h3>
+              <h3 className="text-xl font-bold text-white">📋 Ausencias Registradas ({MESES[mesSeleccionado - 1]} {anioSeleccionado})</h3>
               <div className="flex items-center gap-2">
                 <button
                   onClick={exportarAusenciasCSV}
@@ -1480,7 +1521,7 @@ const Payroll = () => {
             {loadingAusencias ? (
               <LoadingSpinner />
             ) : ausenciasData.length === 0 ? (
-              <p className="text-gray-400 text-center">No hay ausencias registradas.</p>
+              <p className="text-gray-400 text-center">No hay ausencias registradas para este período.</p>
             ) : (
               <div className="overflow-y-auto flex-1">
                 <table className="min-w-full divide-y divide-gray-700/80 text-xs">
@@ -1500,13 +1541,13 @@ const Payroll = () => {
                       const descuento = !a.remunerada ? (parseFloat(a.salario_base) / 30) * parseFloat(a.dias) : 0;
                       return (
                         <tr key={idx} className="hover:bg-gray-700/30">
-                          <td className="px-2 py-1.5 text-white">{a.empleado_nombre} {a.apellidos || ''}</td>
-                          <td className="px-2 py-1.5 text-gray-300">{new Date(a.fecha).toLocaleDateString('es-SV')}</td>
-                          <td className="px-2 py-1.5 text-gray-300">{a.dias}</td>
-                          <td className="px-2 py-1.5 text-gray-300">{a.tipo}</td>
-                          <td className="px-2 py-1.5 text-gray-300">{a.remunerada ? 'Sí' : 'No'}</td>
-                          <td className="px-2 py-1.5 text-rose-400 font-bold">${descuento.toFixed(2)}</td>
-                          <td className="px-2 py-1.5 text-gray-300">{a.observacion || '-'}</td>
+                          <td className="px-2 py-1 text-white">{a.empleado_nombre} {a.apellidos || ''}</td>
+                          <td className="px-2 py-1 text-gray-300">{new Date(a.fecha).toLocaleDateString('es-SV')}</td>
+                          <td className="px-2 py-1 text-gray-300">{a.dias}</td>
+                          <td className="px-2 py-1 text-gray-300">{a.tipo}</td>
+                          <td className="px-2 py-1 text-gray-300">{a.remunerada ? 'Sí' : 'No'}</td>
+                          <td className="px-2 py-1 text-rose-400 font-bold">${descuento.toFixed(2)}</td>
+                          <td className="px-2 py-1 text-gray-300">{a.observacion || '-'}</td>
                         </tr>
                       );
                     })}
@@ -1523,7 +1564,7 @@ const Payroll = () => {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-3xl w-full max-h-[90vh] flex flex-col p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-white">⏱️ Horas Extras Registradas</h3>
+              <h3 className="text-xl font-bold text-white">⏱️ Horas Extras Registradas ({MESES[mesSeleccionado - 1]} {anioSeleccionado})</h3>
               <div className="flex items-center gap-2">
                 <button
                   onClick={exportarHorasExtrasCSV}
@@ -1575,7 +1616,7 @@ const Payroll = () => {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-4xl w-full max-h-[90vh] flex flex-col p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-white">🎄 Aguinaldos {new Date().getFullYear()}</h3>
+              <h3 className="text-xl font-bold text-white">🎄 Aguinaldos {anioSeleccionado}</h3>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleGenerarAguinaldos}
@@ -1653,9 +1694,10 @@ const Payroll = () => {
                           <button
                             onClick={() => handleGenerarBoletaAguinaldo(a.id)}
                             title="Generar boleta PDF"
-                            className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold transition"
+                            className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold transition flex items-center gap-1 mx-auto"
                           >
                             <FileText size={12} />
+                            <span>Boleta</span>
                           </button>
                         </td>
                       </tr>

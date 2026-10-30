@@ -915,18 +915,18 @@ const InventarioDashboard = () => {
           </span>
         </div>
 
-        <div ref={tableContainerRef} className="overflow-x-auto" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+        <div ref={tableContainerRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Producto</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">SKU</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Tipo</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Stock</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Precio Venta</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Costo</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Estado</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Producto</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">SKU</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Tipo</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Stock</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Precio Venta</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Costo</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Estado</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider whitespace-nowrap">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -943,15 +943,15 @@ const InventarioDashboard = () => {
                   const min = parseFloat(p.stock_minimo) || 0;
                   return (
                     <tr key={p.id} className="hover:bg-gray-700/30 transition-colors">
-                      <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{p.nombre}</td>
-                      <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">
+                      <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">{p.nombre}</td>
+                      <td className="px-2 py-1 text-gray-300 font-mono whitespace-nowrap">
                         {p.codigo_sku ? (
                           <span className="bg-gray-900/60 px-1.5 py-0.5 rounded border border-gray-700">{p.codigo_sku}</span>
                         ) : (
                           <span className="text-gray-500 italic">-</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">
+                      <td className="px-2 py-1 whitespace-nowrap">
                         <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full border ${
                           p.tipo === 'Servicio'
                             ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
@@ -960,7 +960,7 @@ const InventarioDashboard = () => {
                           {p.tipo || 'Producto'}
                         </span>
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">
+                      <td className="px-2 py-1 whitespace-nowrap">
                         {stock <= 0 ? (
                           <span className="text-rose-400 font-bold inline-flex items-center gap-1">
                             <XCircle size={14} /> 0 Agotado
@@ -975,20 +975,20 @@ const InventarioDashboard = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 font-bold text-emerald-400 font-mono whitespace-nowrap">
+                      <td className="px-2 py-1 font-bold text-emerald-400 font-mono whitespace-nowrap">
                         ${parseFloat(p.precio_unitario || 0).toFixed(2)}
                       </td>
-                      <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">
+                      <td className="px-2 py-1 text-gray-300 font-mono whitespace-nowrap">
                         ${parseFloat(p.costo_promedio || 0).toFixed(2)}
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">
+                      <td className="px-2 py-1 whitespace-nowrap">
                         {p.activo === 1 ? (
                           <span className="text-emerald-400 font-semibold">Activo</span>
                         ) : (
                           <span className="text-rose-400 font-semibold">Desactivado</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">
+                      <td className="px-2 py-1 whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           {p.activo === 1 && (
                             <>

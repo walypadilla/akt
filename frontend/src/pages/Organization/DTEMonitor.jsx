@@ -260,18 +260,18 @@ const DTEMonitor = () => {
           </span>
         </div>
 
-        <div className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">N°</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Cliente</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Total</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado DTE</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Código Generación</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha Transmisión</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Errores / Detalle</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acción</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">N°</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Cliente</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Total</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado DTE</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Código Generación</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha Transmisión</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Errores / Detalle</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -285,22 +285,22 @@ const DTEMonitor = () => {
               ) : (
                 facturas.map((f) => (
                   <tr key={f.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{f.numero_correlativo}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{f.cliente_nombre || 'N/A'}</td>
-                    <td className="px-2 py-1.5 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(f.total_pagar).toFixed(2)}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
+                    <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">{f.numero_correlativo}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{f.cliente_nombre || 'N/A'}</td>
+                    <td className="px-2 py-1 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(f.total_pagar).toFixed(2)}</td>
+                    <td className="px-2 py-1 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs rounded flex items-center gap-1 ${statusColors[f.estado_dte] || 'bg-gray-700 text-gray-300'}`}>
                         {statusIcons[f.estado_dte]}
                         {statusLabels[f.estado_dte] || f.estado_dte || 'Desconocido'}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5 text-gray-300 font-mono text-xs whitespace-nowrap max-w-[120px] truncate">
+                    <td className="px-2 py-1 text-gray-300 font-mono text-xs whitespace-nowrap max-w-[120px] truncate">
                       {f.codigo_generacion || '-'}
                     </td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
                       {f.fecha_transmision ? new Date(f.fecha_transmision).toLocaleString('es-SV') : '-'}
                     </td>
-                    <td className="px-2 py-1.5 text-gray-300 max-w-[300px]">
+                    <td className="px-2 py-1 text-gray-300 max-w-[300px]">
                       {f.estado_dte === 'rechazado' && f.errores ? (
                         <div className="text-red-400 text-xs">
                           <span className="font-semibold">❌ Error:</span>
@@ -324,7 +324,7 @@ const DTEMonitor = () => {
                         <span className="text-gray-500">-</span>
                       )}
                     </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
+                    <td className="px-2 py-1 whitespace-nowrap">
                       {/* Botón de enviar al MH - visible para pendientes, firmados y enviados (no procesados ni rechazados) */}
                       {f.estado_dte !== 'procesado' && f.estado_dte !== 'rechazado' && (
                         <button

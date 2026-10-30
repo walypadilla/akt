@@ -10,15 +10,11 @@ import {
   anularFactura,
   getFacturaPDF,
   enviarFacturaWhatsApp,
-  getDashboardFacturacion,
   getAniosDisponiblesFacturas,
   exportarFacturasFiltradas,
   exportarTodasFacturas,
-  exportarEvolucionVentas,
-  exportarComparacionPagos,
   getFacturaTicket,
   enviarFacturaMH,        
-  exportarTopClientes,
   enviarFacturaEmail,
   exportarCierreMes
 } from '../../api/invoices';
@@ -28,9 +24,10 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import InvoiceForm from '../../components/forms/InvoiceForm';
-import { Printer } from 'lucide-react';
+import FacturacionDashboard from './FacturacionDashboard'; // IMPORTACIÓN DEL DASHBOARD
 import { toast } from 'react-toastify';
 import {
+  Printer,
   Download,
   Plus,
   Edit3,
@@ -39,33 +36,18 @@ import {
   Search,
   X,
   Eye,
-  FileText,
   Calendar,
   DollarSign,
-  AlertCircle,
-  CreditCard,
-  Users,
   Mail,
   Send,
   Monitor,
   CheckCircle,
+  ChevronDown,
+  FileCheck
 } from 'lucide-react';
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Cell,
-} from 'recharts';
 import { useAuth } from '../../hooks/useAuth';
 
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 const statusColors = {
   Borrador: 'bg-gray-700 text-gray-300 border border-gray-600',
@@ -73,8 +55,6 @@ const statusColors = {
   Pagada: 'bg-green-900/50 text-green-400 border border-green-700',
   Anulada: 'bg-red-900/50 text-red-400 border border-red-700',
 };
-
-const COLORS = ['#8b5cf6', '#f43f5e', '#10b981', '#f59e0b', '#06b6d4'];
 
 const Invoices = () => {
   const navigate = useNavigate();
@@ -86,11 +66,7 @@ const Invoices = () => {
   const tableRef = useRef(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
-
- 
-  // Dashboard data
-  const [dashboard, setDashboard] = useState(null);
-  const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [openActionMenuId, setOpenActionMenuId] = useState(null);
 
   // Filtros
   const [filtros, setFiltros] = useState({
@@ -106,7 +82,6 @@ const Invoices = () => {
     limit: 10,
   });
   const [filtrosTemp, setFiltrosTemp] = useState({ ...filtros });
-  const [filtrosExport, setFiltrosExport] = useState({ mes: '', anio: new Date().getFullYear() });
 
   // Obtener número de WhatsApp de la organización
   const orgTelefono = user?.organizacion?.telefono_whatsapp || 'No configurado';
@@ -123,7 +98,6 @@ const Invoices = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedFactura, setSelectedFactura] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
-  // Modal WhatsApp
   const [whatsappModal, setWhatsappModal] = useState({ isOpen: false, facturaId: null, clienteNombre: '', clienteTelefono: '', orgTelefono: '' });
   const [emailModal, setEmailModal] = useState({ 
     isOpen: false, 
@@ -132,23 +106,12 @@ const Invoices = () => {
     clienteEmail: '' 
   });
 
-  // ============================================================
-  // FUNCIONES DE CARGA
-  // ============================================================
-
-  const loadDashboard = async () => {
-    try {
-      setLoadingDashboard(true);
-      const params = { mes: filtros.mes, anio: filtros.anio };
-      const data = await getDashboardFacturacion(params).catch(() => null);
-      setDashboard(data);
-    } catch (error) {
-      console.error('Error loading dashboard:', error);
-      setDashboard(null);
-    } finally {
-      setLoadingDashboard(false);
-    }
-  };
+  // Cerrar el menú de acciones si se hace clic afuera
+  useEffect(() => {
+    const handleClickOutside = () => setOpenActionMenuId(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -179,10 +142,6 @@ const Invoices = () => {
     }
   };
 
-  // ============================================================
-  // EFECTOS
-  // ============================================================
-
   useEffect(() => {
     const loadCatalogos = async () => {
       try {
@@ -202,8 +161,8 @@ const Invoices = () => {
   }, []);
 
   useEffect(() => {
-    loadDashboard();
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     filtros.page,
     filtros.mes,
@@ -225,7 +184,7 @@ const Invoices = () => {
   }, [loading, facturas, scrollPosition]);
 
   // ============================================================
-  // MANEJADORES DE FILTROS
+  // MANEJADORES DE FILTROS Y PERÍODO
   // ============================================================
 
   const aplicarFiltros = () => {
@@ -257,8 +216,36 @@ const Invoices = () => {
     if (tableRef.current) setScrollPosition(0);
   };
 
+  const volverMesActual = () => {
+    const hoy = new Date();
+    const anio = hoy.getFullYear();
+    const mes = (hoy.getMonth() + 1).toString();
+    setFiltros(prev => ({ ...prev, anio, mes, page: 1 }));
+    setFiltrosTemp(prev => ({ ...prev, anio, mes }));
+  };
+
   const handleSearchKeyDown = (e) => {
     if (e.key === 'Enter') aplicarFiltros();
+  };
+
+  const handleAlertasClick = () => {
+    setFiltros({
+      ...filtros,
+      search: '',
+      cliente_id: '',
+      estado: 'Emitida',
+      condicion_operacion: 'Credito',
+      solo_pendientes: 'true',
+      page: 1,
+    });
+    setFiltrosTemp({ 
+      ...filtrosTemp, 
+      search: '',
+      cliente_id: '',
+      estado: 'Emitida', 
+      condicion_operacion: 'Credito', 
+      solo_pendientes: 'true' 
+    });
   };
 
   const getTablaTitle = () => {
@@ -281,7 +268,7 @@ const Invoices = () => {
   };
 
   // ============================================================
-  // CRUD Y ACCIONES
+  // CRUD Y ACCIONES DE FACTURA
   // ============================================================
 
   const handleSubmit = async (data) => {
@@ -297,7 +284,6 @@ const Invoices = () => {
       setShowForm(false);
       setEditing(null);
       loadData();
-      loadDashboard();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error al guardar');
     } finally {
@@ -310,7 +296,6 @@ const Invoices = () => {
       await cambiarEstadoFactura(id, estado);
       toast.success(`Estado cambiado a ${estado}`);
       loadData();
-      loadDashboard();
     } catch (err) {
       toast.error('Error al cambiar estado');
     }
@@ -326,7 +311,6 @@ const Invoices = () => {
           await anularFactura(id);
           toast.success('Factura anulada');
           loadData();
-          loadDashboard();
         } catch (err) {
           toast.error(err.response?.data?.message || 'Error al anular');
         }
@@ -342,21 +326,6 @@ const Invoices = () => {
       setShowDetailModal(true);
     } catch (err) {
       toast.error('Error al cargar detalle');
-    }
-  };
-
-  const handleGenerarPDF = async (id) => {
-    try {
-      const blob = await getFacturaPDF(id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `factura_${id}.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      toast.success('PDF generado');
-    } catch (err) {
-      toast.error(err.message || 'Error al generar PDF');
     }
   };
 
@@ -427,12 +396,10 @@ const Invoices = () => {
         return;
       }
 
-      // Si la factura no está procesada por el MH, advertir
       if (factura.estado_dte !== 'procesado') {
         toast.warning('La factura no ha sido enviada al MH. Se enviará sin sello de recepción.');
       }
 
-      // Usar el modal de correo existente
       setEmailModal({
         isOpen: true,
         facturaId: id,
@@ -441,34 +408,6 @@ const Invoices = () => {
       });
     } catch (err) {
       console.error('Error al preparar envío de correo con adjuntos:', err);
-      toast.error('Error al preparar envío');
-    }
-  };
-
-  // Función handleEnviarEmail
-  const handleEnviarEmail = async (id) => {
-    try {
-      const factura = await getFactura(id);
-      const cliente = clientes.find(c => c.id === factura.cliente_id);
-      
-      if (!cliente) {
-        toast.error('Cliente no encontrado');
-        return;
-      }
-      
-      if (!cliente.correo) {
-        toast.error('El cliente no tiene correo electrónico registrado');
-        return;
-      }
-
-      setEmailModal({
-        isOpen: true,
-        facturaId: id,
-        clienteNombre: cliente.nombre,
-        clienteEmail: cliente.correo,
-      });
-    } catch (err) {
-      console.error('Error al preparar envío de correo:', err);
       toast.error('Error al preparar envío');
     }
   };
@@ -506,7 +445,7 @@ const Invoices = () => {
         facturaId: id,
         clienteNombre: cliente.nombre,
         clienteTelefono: cliente.telefono_whatsapp,
-        orgTelefono: orgTelefono, // ✅ Usar el número de la organización del usuario
+        orgTelefono: orgTelefono,
       });
     } catch (err) {
       toast.error('Error al preparar envío');
@@ -523,38 +462,21 @@ const Invoices = () => {
     }
   };
 
-  const handleAlertasClick = () => {
-    setFiltros({
-      ...filtros,
-      search: '',
-      cliente_id: '',
-      estado: 'Emitida',
-      condicion_operacion: 'Credito',
-      solo_pendientes: 'true',
-      page: 1,
-    });
-    setFiltrosTemp({ 
-    ...filtrosTemp, 
-    search: '',
-    cliente_id: '',
-    estado: 'Emitida', 
-    condicion_operacion: 'Credito', 
-    solo_pendientes: 'true' });
-  };
-
   const handleExportarCierreMes = async () => {
     try {
+      const hoy = new Date();
+      const mesActual = hoy.getMonth() + 1;
+      const anioActual = hoy.getFullYear();
+      
       const params = new URLSearchParams();
-      // Puedes pedir mes y año al usuario, o usar el mes actual
-      const mes = filtros.mes || new Date().getMonth() + 1;
-      const anio = filtros.anio || new Date().getFullYear();
-      params.append('mes', mes);
-      params.append('anio', anio);
+      params.append('mes', mesActual);
+      params.append('anio', anioActual);
+      
       const blob = await exportarCierreMes(params.toString());
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `cierre_mes_${mes}_${anio}.zip`;
+      a.download = `cierre_mes_${mesActual}_${anioActual}.zip`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success('Cierre de mes exportado');
@@ -564,7 +486,7 @@ const Invoices = () => {
   };
 
   // ============================================================
-  // EXPORTAR
+  // EXPORTACIONES DE LISTADOS
   // ============================================================
 
   const handleExportarFiltrados = async () => {
@@ -588,13 +510,13 @@ const Invoices = () => {
   const handleExportarTodas = async () => {
     try {
       const params = new URLSearchParams();
-      params.append('anio', filtrosExport.anio);
-      if (filtrosExport.mes) params.append('mes', filtrosExport.mes);
+      params.append('anio', filtros.anio);
+      if (filtros.mes) params.append('mes', filtros.mes);
       const blob = await exportarTodasFacturas(params.toString());
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `facturas_todas_${filtrosExport.anio}${filtrosExport.mes ? `_mes_${filtrosExport.mes}` : ''}.csv`;
+      a.download = `facturas_todas_${filtros.anio}${filtros.mes ? `_mes_${filtros.mes}` : ''}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success('Todas las facturas exportadas');
@@ -603,91 +525,11 @@ const Invoices = () => {
     }
   };
 
-  // Exportar gráficas
-  const handleExportarEvolucion = async () => {
-    try {
-      const params = new URLSearchParams({ anio: filtros.anio });
-      const blob = await exportarEvolucionVentas(params.toString());
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `evolucion_ventas_${filtros.anio}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      toast.success('Evolución de ventas exportada');
-    } catch (err) {
-      toast.error(err.message || 'Error al exportar');
-    }
-  };
-
-  const handleExportarComparacionPagos = async () => {
-    try {
-      const params = new URLSearchParams({ anio: filtros.anio });
-      const blob = await exportarComparacionPagos(params.toString());
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `comparacion_pagos_${filtros.anio}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      toast.success('Comparación de pagos exportada');
-    } catch (err) {
-      toast.error(err.message || 'Error al exportar');
-    }
-  };
-
-  const handleExportarTopClientes = async () => {
-    try {
-      const params = new URLSearchParams({ anio: filtros.anio });
-      const blob = await exportarTopClientes(params.toString());
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `top_clientes_${filtros.anio}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      toast.success('Top clientes exportado');
-    } catch (err) {
-      toast.error(err.message || 'Error al exportar');
-    }
-  };
-
-  // ============================================================
-  // RENDER
-  // ============================================================
-
-  if (loading && facturas.length === 0 && !dashboard) return <LoadingSpinner />;
+  if (loading && facturas.length === 0) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={loadData} />;
 
   const { total, page, totalPages } = paginacion;
-  const tieneFiltrosActivos = Object.values(filtros).some((v) => v && v !== '' && v !== 1 && v !== false);
-
-  const { kpis, evolucion, comparacionPagos, alertas, topClientes, } = dashboard || {};
-
-  const evolucionData = (evolucion || []).map((item) => ({
-    mes: new Date(2024, item.mes - 1).toLocaleString('es', { month: 'short' }),
-    'Total Ventas': item.total_ventas,
-    Contado: item.ventas_contado,
-    Crédito: item.ventas_credito,
-    Pagadas: item.ventas_pagadas,
-  }));
-
-  const comparacionData = (comparacionPagos || []).map((item) => ({
-    mes: new Date(2024, item.mes - 1).toLocaleString('es', { month: 'short' }),
-    Pagadas: item.pagadas,
-    Pendientes: item.pendientes,
-  }));
-
-  const topClientesData = (topClientes || []).map((item) => ({
-    name: item.cliente_nombre,
-    total: parseFloat(item.total_compras),
-    nit: item.cliente_nit || '',
-  }));
-
-  const totalVentas = kpis?.total_ventas || 0;
-  const cuentasCobrar = kpis?.cuentas_por_cobrar || 0;
-  const ivaRecaudado = kpis?.iva_recaudado || 0;
-  const ventasMes = kpis?.ventas_mes || 0;
+  const tieneFiltrosActivos = Object.values(filtros).some((v) => v && v !== '' && v !== 1 && v !== false && v !== new Date().getFullYear());
 
   return (
     <div className="p-6 space-y-6">
@@ -700,47 +542,6 @@ const Invoices = () => {
           <p className="text-xs text-gray-400 mt-0.5">Control de facturas y ventas con DTE.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 bg-gray-900/50 px-3 py-1.5 rounded-lg border border-gray-700">
-            <Calendar className="w-4 h-4 text-purple-400" />
-            <span className="text-xs text-gray-300 font-semibold">Año:</span>
-            <select
-              value={filtros.anio}
-              onChange={(e) => {
-                const val = parseInt(e.target.value);
-                setFiltros((prev) => ({ ...prev, anio: val, page: 1 }));
-                setFiltrosTemp((prev) => ({ ...prev, anio: val }));
-              }}
-              className="bg-transparent border-none text-white text-sm font-bold focus:outline-none focus:ring-0 cursor-pointer"
-            >
-              {aniosDisponibles.length > 0
-                ? aniosDisponibles.map((year) => (
-                    <option key={year} value={year}>{year}</option>
-                  ))
-                : (
-                  <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
-                )}
-            </select>
-          </div>
-          <div className="flex items-center gap-2 bg-gray-900/50 px-3 py-1.5 rounded-lg border border-gray-700">
-            <span className="text-xs text-gray-300 font-semibold">Mes:</span>
-            <select
-              value={filtrosExport.mes}
-              onChange={(e) => setFiltrosExport(prev => ({ ...prev, mes: e.target.value }))}
-              className="bg-transparent border-none text-white text-sm font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="">Todos</option>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                <option key={m} value={m}>{new Date(2024, m - 1).toLocaleString('es', { month: 'long' })}</option>
-              ))}
-            </select>
-          </div>
-          <button
-            onClick={handleExportarCierreMes}
-            className="bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-          >
-            <Download size={14} /> Cierre de Mes
-          </button>
-
           <button
             onClick={handleExportarTodas}
             className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
@@ -753,7 +554,6 @@ const Invoices = () => {
           >
             <Monitor size={14} /> Monitor DTE
           </button>
-
           <button
             onClick={() => { setEditing(null); setShowForm(true); }}
             className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-md shadow-purple-900/30"
@@ -763,188 +563,65 @@ const Invoices = () => {
         </div>
       </div>
 
-      {/* KPIs */}
-      {!loadingDashboard && dashboard && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700">
-            <p className="text-sm text-gray-400">Total Ventas</p>
-            <p className="text-2xl font-bold text-purple-400">${totalVentas.toFixed(2)}</p>
-          </div>
-          <div
-            className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700 cursor-pointer hover:bg-gray-700/50 transition"
-            onClick={handleAlertasClick}
-          >
-            <p className="text-sm text-gray-400 flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-amber-400" /> Cuentas por Cobrar
-            </p>
-            <p className="text-2xl font-bold text-amber-400">${cuentasCobrar.toFixed(2)}</p>
-          </div>
-          <div className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700">
-            <p className="text-sm text-gray-400">IVA Recaudado</p>
-            <p className="text-2xl font-bold text-cyan-400">${ivaRecaudado.toFixed(2)}</p>
-          </div>
-          <div className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700">
-            <p className="text-sm text-gray-400">Ventas del Mes</p>
-            <p className="text-2xl font-bold text-emerald-400">${ventasMes.toFixed(2)}</p>
-          </div>
-        </div>
-      )}
+      {/* BANNER DE PERÍODO Y CIERRE */}
+      <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3 flex flex-wrap items-center gap-3">
+        <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
+          <Calendar size={14} className="text-purple-400" /> Período
+        </span>
+        <select
+          value={filtros.anio}
+          onChange={(e) => {
+            const val = parseInt(e.target.value);
+            setFiltros(prev => ({ ...prev, anio: val, page: 1 }));
+            setFiltrosTemp(prev => ({ ...prev, anio: val }));
+          }}
+          className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+        >
+          {aniosDisponibles.length > 0 ? (
+            aniosDisponibles.map((year) => (
+              <option key={year} value={year}>Año: {year}</option>
+            ))
+          ) : (
+            <option value={new Date().getFullYear()}>Año: {new Date().getFullYear()}</option>
+          )}
+        </select>
+        <select
+          value={filtros.mes}
+          onChange={(e) => {
+            const val = e.target.value;
+            setFiltros(prev => ({ ...prev, mes: val, page: 1 }));
+            setFiltrosTemp(prev => ({ ...prev, mes: val }));
+          }}
+          className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+        >
+          <option value="">Todos los meses</option>
+          {MESES.map((n, i) => (
+            <option key={i + 1} value={i + 1}>{n}</option>
+          ))}
+        </select>
+        <button
+          onClick={volverMesActual}
+          className="text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 font-semibold transition"
+        >
+          Mes Actual
+        </button>
+        <button
+          onClick={handleExportarCierreMes}
+          title="Descargar reporte y cierre del mes actual"
+          className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 font-semibold flex items-center gap-1.5 transition ml-auto"
+        >
+          <FileCheck size={14} /> Cierre de Mes
+        </button>
+      </div>
 
-      {/* GRÁFICAS */}
-      {!loadingDashboard && dashboard && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Gráfica 1: Evolución de Ventas */}
-          <div className="bg-gray-800/90 p-3 rounded-xl shadow-lg border border-gray-700">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-200">Evolución de Ventas ({filtros.anio})</h3>
-              <button
-                onClick={handleExportarEvolucion}
-                className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 transition"
-              >
-                <Download size={13} /> Exportar
-              </button>
-            </div>
-            {evolucionData.some((d) => d['Total Ventas'] > 0 || d.Contado > 0 || d.Crédito > 0 || d.Pagadas > 0) ? (
-              <ResponsiveContainer width="100%" height={180}>
-                <LineChart data={evolucionData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="mes" stroke="#9ca3af" fontSize={10} />
-                  <YAxis stroke="#9ca3af" fontSize={10} />
-                  <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }} />
-                  <Legend wrapperStyle={{ color: '#e5e7eb', fontSize: '10px' }} />
-                  <Line type="monotone" dataKey="Total Ventas" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Contado" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Crédito" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Pagadas" stroke="#f43f5e" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="5 5" />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[180px] flex items-center justify-center text-gray-400 text-sm">No hay datos de evolución</div>
-            )}
-          </div>
+      {/* DASHBOARD DE MÉTRICAS Y GRÁFICAS (COMPONENTE SEPARADO) */}
+      <FacturacionDashboard 
+        mes={filtros.mes} 
+        anio={filtros.anio} 
+        onAlertClick={handleAlertasClick} 
+      />
 
-          {/* Gráfica 2: Pagadas vs Pendientes */}
-          <div className="bg-gray-800/90 p-3 rounded-xl shadow-lg border border-gray-700">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-200">Pagadas vs Pendientes ({filtros.anio})</h3>
-              <button
-                onClick={handleExportarComparacionPagos}
-                className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 transition"
-              >
-                <Download size={13} /> Exportar
-              </button>
-            </div>
-            {comparacionData.some((d) => d.Pagadas > 0 || d.Pendientes > 0) ? (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={comparacionData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="mes" stroke="#9ca3af" fontSize={10} />
-                  <YAxis stroke="#9ca3af" fontSize={10} />
-                  <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }} />
-                  <Legend wrapperStyle={{ color: '#e5e7eb', fontSize: '10px' }} />
-                  <Bar dataKey="Pagadas" fill="#10b981" />
-                  <Bar dataKey="Pendientes" fill="#f59e0b" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[180px] flex items-center justify-center text-gray-400 text-sm">No hay datos de comparación</div>
-            )}
-          </div>
-          
-          {/* Alertas de Vencimiento - 7 días */}
-          <div
-            className="bg-gray-800/90 p-3 rounded-xl shadow-lg border border-gray-700 cursor-pointer hover:bg-gray-700/50 transition"
-            onClick={handleAlertasClick}
-          >
-              <h3 className="text-sm font-semibold text-gray-200 mb-2 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-400" /> Alertas de Vencimiento (Próximos 7 días)
-              </h3>
-              {alertas && alertas.length > 0 ? (
-                <div className="overflow-y-auto max-h-40">
-                  <table className="min-w-full divide-y divide-gray-700/80 text-xs">
-                    <thead className="bg-gray-900 sticky top-0">
-                      <tr>
-                        <th className="px-2 py-1 text-left text-gray-400">Cliente</th>
-                        <th className="px-2 py-1 text-left text-gray-400">Monto</th>
-                        <th className="px-2 py-1 text-left text-gray-400">Vence en</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-700/60">
-                      {alertas.slice(0, 5).map((a, i) => {
-                        const dias = Math.ceil((new Date(a.fecha_vencimiento) - new Date()) / (1000 * 60 * 60 * 24));
-                        let textoDias = `${dias} días`;
-                        let color = 'text-emerald-400';
-                        if (dias < 0) {
-                          textoDias = `Vencida (hace ${Math.abs(dias)} d)`;
-                          color = 'text-rose-600 font-bold';
-                        } else if (dias === 0) {
-                          textoDias = 'Vence hoy';
-                          color = 'text-rose-500 font-bold';
-                        } else if (dias <= 3) {
-                          color = 'text-rose-400';
-                        } else if (dias <= 7) {
-                          color = 'text-amber-400';
-                        }
-                        return (
-                          <tr key={i} className="hover:bg-gray-700/30">
-                            <td className="px-2 py-1 text-gray-300">{a.cliente_nombre}</td>
-                            <td className="px-2 py-1 text-emerald-400 font-bold">${parseFloat(a.total_pagar).toFixed(2)}</td>
-                            <td className={`px-2 py-1 font-semibold ${color}`}>{textoDias}</td>
-                          </tr>
-                        );
-                      })}
-                      {alertas.length > 5 && (
-                        <tr>
-                          <td colSpan="3" className="px-2 py-1 text-center text-gray-400 text-xs">
-                            + {alertas.length - 5} más. Haz clic para ver todas
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-gray-400 text-sm">No hay alertas de vencimiento próximas</p>
-              )}
-          </div>
-
-          {/* Gráfica 3: Top 5 Clientes (Barras) */}
-          <div className="bg-gray-800/90 p-3 rounded-xl shadow-lg border border-gray-700">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-                <Users className="w-4 h-4 text-blue-400" /> Top 5 Clientes
-              </h3>
-              <button
-                onClick={handleExportarTopClientes}
-                className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 transition"
-              >
-                <Download size={13} /> Exportar
-              </button>
-            </div>
-            {topClientesData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={topClientesData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
-                  <XAxis type="number" stroke="#9ca3af" fontSize={10} />
-                  <YAxis dataKey="name" type="category" stroke="#9ca3af" fontSize={9} width={100} interval={0} />
-                  <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }} />
-                  <Bar dataKey="total" fill="#8b5cf6" barSize={15}>
-                    {topClientesData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[180px] flex items-center justify-center text-gray-400 text-sm">No hay datos de clientes</div>
-            )}
-          </div>
-        </div>
-      )}
-
-
-
-      {/* FILTROS */}
+      {/* FILTROS Y BÚSQUEDA */}
       <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -1055,7 +732,7 @@ const Invoices = () => {
         )}
       </div>
 
-      {/* TABLA */}
+      {/* TABLA DE FACTURAS */}
       <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 overflow-hidden">
         <div className="px-4 py-2.5 border-b border-gray-700/80 bg-gray-800/40 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -1067,19 +744,19 @@ const Invoices = () => {
           </span>
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div ref={tableRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">N° Correlativo</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Cliente</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Usuario</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Tipo</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Total</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Condición</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">N° Correlativo</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Cliente</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Usuario</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Tipo</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Total</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Condición</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -1091,115 +768,158 @@ const Invoices = () => {
                   </td>
                 </tr>
               ) : (
-                facturas.map((f) => (
-                  <tr key={f.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{f.numero_correlativo}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{f.cliente_nombre || 'N/A'}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
-                      {new Date(f.creado_en).toLocaleDateString('es-SV')}
-                    </td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{f.usuario_nombre || 'N/A'}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{f.tipo_documento}</td>
-                    <td className="px-2 py-1.5 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(f.total_pagar).toFixed(2)}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs rounded ${statusColors[f.estado] || 'bg-gray-700 text-gray-300 border border-gray-600'}`}>
-                        {f.estado}
-                      </span>
-                      {f.estado_dte === 'procesado' && (
-                        <span className="ml-1 px-1.5 py-0.5 text-xs rounded bg-purple-900/50 text-purple-300 border border-purple-700">
-                          Sellada
+                facturas.map((f, index) => {
+                  const esUltimasFilas = index >= facturas.length - 3 && facturas.length > 4;
+                  return (
+                    <tr key={f.id} className="hover:bg-gray-700/30 transition-colors">
+                      <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">{f.numero_correlativo}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{f.cliente_nombre || 'N/A'}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
+                        {new Date(f.creado_en).toLocaleDateString('es-SV')}
+                      </td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{f.usuario_nombre || 'N/A'}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap font-mono">{f.tipo_documento}</td>
+                      <td className="px-2 py-1 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(f.total_pagar).toFixed(2)}</td>
+                      <td className="px-2 py-1 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 text-xs rounded ${statusColors[f.estado] || 'bg-gray-700 text-gray-300 border border-gray-600'}`}>
+                          {f.estado}
                         </span>
-                      )}
-                      {f.estado_dte === 'rechazado' && (
-                        <span className="ml-1 px-1.5 py-0.5 text-xs rounded bg-red-900/50 text-red-300 border border-red-700">
-                          Rechazada
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{f.condicion_operacion || 'Contado'}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                        {/* Botones de acción (Ver, PDF, etc.) */}
-                        <button
-                          onClick={() => handleVerDetalle(f.id)}
-                          title="Ver detalle"
-                          className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                        {f.estado_dte === 'procesado' && (
+                          <span className="ml-1 px-1.5 py-0.5 text-xs rounded bg-purple-900/50 text-purple-300 border border-purple-700">
+                            Sellada
+                          </span>
+                        )}
+                        {f.estado_dte === 'rechazado' && (
+                          <span className="ml-1 px-1.5 py-0.5 text-xs rounded bg-red-900/50 text-red-300 border border-red-700">
+                            Rechazada
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{f.condicion_operacion || 'Contado'}</td>
+
+                      {/* MENÚ DESPLEGABLE DE ACCIONES */}
+                      <td className="px-2 py-1 whitespace-nowrap text-center">
+                        <div 
+                          className="relative group inline-block text-left"
+                          onMouseEnter={() => setOpenActionMenuId(f.id)}
+                          onMouseLeave={() => setOpenActionMenuId(null)}
                         >
-                          <Eye size={12} />
-                        </button>
-                        <button
-                          onClick={() => handleImprimirPDF(f.id)}
-                          title="Imprimir Factura"
-                          className="px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white border border-indigo-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                        >
-                          <Printer size={12} />
-                        </button>
-                        <button
-                          onClick={() => handleEnviarMH(f.id)}
-                          disabled={f.estado_dte === 'procesado' || f.estado_dte === 'rechazado'}
-                          title="Enviar al Ministerio de Hacienda"
-                          className={`px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 transition ${
-                            f.estado_dte === 'procesado' || f.estado_dte === 'rechazado'
-                              ? 'bg-gray-600/50 text-gray-400 cursor-not-allowed border border-gray-600'
-                              : 'bg-purple-500/10 hover:bg-purple-500 text-purple-400 hover:text-white border border-purple-500/30'
-                          }`}
-                        >
-                          <Send size={12} />
-                        </button>
-                        {f.estado_dte === 'procesado' && f.sello_recepcion && (
                           <button
-                            onClick={() => handleEnviarEmailAdjuntos(f.id)}
-                            title="Enviar por correo con adjuntos"
-                            className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenActionMenuId(openActionMenuId === f.id ? null : f.id);
+                            }}
+                            className="inline-flex justify-center items-center w-full rounded-md border border-gray-600 shadow-sm px-2 py-1 bg-gray-800 text-xs font-medium text-gray-300 hover:bg-gray-700 focus:outline-none transition-colors"
                           >
-                            <Mail size={12} />
+                            Acciones 
+                            <ChevronDown 
+                              className={`-mr-1 ml-1 h-3 w-3 transition-transform duration-200 ${
+                                openActionMenuId === f.id 
+                                  ? esUltimasFilas ? 'rotate-0' : 'rotate-180' 
+                                  : esUltimasFilas ? 'rotate-180 group-hover:rotate-0' : 'group-hover:rotate-180'
+                              }`} 
+                            />
                           </button>
-                        )}
-                        <button
-                          onClick={() => handleImprimirTicket(f.id)}
-                          title="Imprimir Ticket"
-                          className="px-2 py-1 bg-orange-500/10 hover:bg-orange-500 text-orange-400 hover:text-white border border-orange-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                        >
-                          <Printer size={12} />
-                        </button>
-                        {f.estado === 'Emitida' && (
-                          <>
-                            <button
-                              onClick={() => handleStatusChange(f.id, 'Pagada')}
-                              title="Marcar como pagada"
-                              className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                            >
-                              <CheckCircle size={12} />
-                            </button>
-                          </>
-                        )}
-                        {f.estado !== 'Pagada' && f.estado !== 'Anulada' && (
-                          <>
-                            <button
-                              onClick={() => { setEditing(f); setShowForm(true); }}
-                              title="Editar"
-                              className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                            >
-                              <Edit3 size={12} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(f.id)}
-                              title="Anular"
-                              className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+
+                          {openActionMenuId === f.id && (
+                            <div className={`absolute right-0 w-48 rounded-xl shadow-2xl bg-gray-800/95 backdrop-blur-sm border border-gray-700 p-2 z-50 flex flex-col gap-1 transition-all duration-150 ${esUltimasFilas ? 'bottom-full -mb-2 origin-bottom-right' : 'top-full -mt-3 origin-top-right'}`}>
+                              
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleVerDetalle(f.id); setOpenActionMenuId(null); }}
+                                className="group flex items-center w-full px-2.5 py-1.5 text-xs font-semibold text-gray-200 bg-gray-900/60 hover:bg-gray-700 border border-gray-700/50 rounded-lg transition-all"
+                              >
+                                <Eye className="mr-2 h-3.5 w-3.5 text-cyan-400" />
+                                Ver Detalle
+                              </button>
+
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleImprimirPDF(f.id); setOpenActionMenuId(null); }}
+                                className="group flex items-center w-full px-2.5 py-1.5 text-xs font-semibold text-gray-200 bg-gray-900/60 hover:bg-gray-700 border border-gray-700/50 rounded-lg transition-all"
+                              >
+                                <Printer className="mr-2 h-3.5 w-3.5 text-indigo-400" />
+                                Imprimir Factura
+                              </button>
+
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleImprimirTicket(f.id); setOpenActionMenuId(null); }}
+                                className="group flex items-center w-full px-2.5 py-1.5 text-xs font-semibold text-gray-200 bg-gray-900/60 hover:bg-gray-700 border border-gray-700/50 rounded-lg transition-all"
+                              >
+                                <Printer className="mr-2 h-3.5 w-3.5 text-amber-400" />
+                                Imprimir Ticket
+                              </button>
+
+                              <div className="my-0.5 border-t border-gray-700/60"></div>
+
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEnviarMH(f.id); setOpenActionMenuId(null); }}
+                                disabled={f.estado_dte === 'procesado' || f.estado_dte === 'rechazado'}
+                                className={`group flex items-center w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-all border ${
+                                  f.estado_dte === 'procesado' || f.estado_dte === 'rechazado'
+                                    ? 'bg-gray-900/30 text-gray-500 border-gray-800 cursor-not-allowed'
+                                    : 'text-purple-200 bg-purple-900/20 hover:bg-purple-800/40 border-purple-800/30 hover:border-purple-500/50'
+                                }`}
+                              >
+                                <Send className="mr-2 h-3.5 w-3.5 text-purple-400" />
+                                Enviar a Hacienda
+                              </button>
+
+                              {f.estado_dte === 'procesado' && f.sello_recepcion && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleEnviarEmailAdjuntos(f.id); setOpenActionMenuId(null); }}
+                                  className="group flex items-center w-full px-2.5 py-1.5 text-xs font-semibold text-gray-200 bg-gray-900/60 hover:bg-gray-700 border border-gray-700/50 rounded-lg transition-all"
+                                >
+                                  <Mail className="mr-2 h-3.5 w-3.5 text-blue-400" />
+                                  Correo con Adjuntos
+                                </button>
+                              )}
+
+                              {(f.estado === 'Emitida' || (f.estado !== 'Pagada' && f.estado !== 'Anulada')) && (
+                                <div className="my-0.5 border-t border-gray-700/60"></div>
+                              )}
+
+                              {f.estado === 'Emitida' && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleStatusChange(f.id, 'Pagada'); setOpenActionMenuId(null); }}
+                                  className="group flex items-center w-full px-2.5 py-1.5 text-xs font-semibold text-emerald-100 bg-emerald-900/20 hover:bg-emerald-800/40 border border-emerald-800/30 hover:border-emerald-500/50 rounded-lg transition-all"
+                                >
+                                  <CheckCircle className="mr-2 h-3.5 w-3.5 text-emerald-400" />
+                                  Marcar Pagada
+                                </button>
+                              )}
+
+                              {f.estado !== 'Pagada' && f.estado !== 'Anulada' && (
+                                <>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditing(f); setShowForm(true); setOpenActionMenuId(null); }}
+                                    className="group flex items-center w-full px-2.5 py-1.5 text-xs font-semibold text-gray-200 bg-gray-900/60 hover:bg-gray-700 border border-gray-700/50 rounded-lg transition-all"
+                                  >
+                                    <Edit3 className="mr-2 h-3.5 w-3.5 text-yellow-400" />
+                                    Editar Factura
+                                  </button>
+
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(f.id); setOpenActionMenuId(null); }}
+                                    className="group flex items-center w-full px-2.5 py-1.5 text-xs font-semibold text-rose-200 bg-rose-900/20 hover:bg-rose-800/40 border border-rose-800/30 hover:border-rose-500/50 rounded-lg transition-all mt-0.5"
+                                  >
+                                    <Trash2 className="mr-2 h-3.5 w-3.5 text-rose-400" />
+                                    Anular Factura
+                                  </button>
+                                </>
+                              )}
+
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
+        {/* PAGINACIÓN */}
         {totalPages > 1 && (
           <div className="flex justify-between items-center px-4 py-2 border-t border-gray-700/80 bg-gray-900/50 text-xs">
             <span className="text-gray-400">

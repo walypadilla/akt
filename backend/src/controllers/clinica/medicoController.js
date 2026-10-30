@@ -9,19 +9,45 @@ const { pool } = require('../../config/db');
 exports.listar = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
-    const { activo, anio, mes } = req.query;
-    const soloActivos = activo !== 'false';
+    // Capturamos 'estado' y 'search' enviados desde el frontend
+    const { estado, search, anio, mes } = req.query;
+    
     const anioActual = new Date().getFullYear();
     const anioFiltro = anio ? parseInt(anio) : anioActual;
     const mesFiltro = mes ? parseInt(mes) : null;
 
+    // Pasamos 'false' en el último parámetro para traer todos los registros de la DB
+    // y aplicar los filtros dinámicos aquí en el controlador.
     const medicos = await Medico.findAllWithStats(
       organizacion_id,
       anioFiltro,
       mesFiltro,
-      soloActivos
+      false 
     );
-    res.json(medicos);
+
+    let filtered = medicos;
+
+    // 1. Filtro de búsqueda de texto (input de búsqueda)
+    if (search) {
+      const term = search.toLowerCase();
+      filtered = filtered.filter(m => 
+        (m.nombre && m.nombre.toLowerCase().includes(term)) ||
+        (m.especialidad && m.especialidad.toLowerCase().includes(term)) ||
+        (m.numero_licencia && String(m.numero_licencia).toLowerCase().includes(term))
+      );
+    }
+
+    // 2. Filtro por estado
+    if (estado === 'inactivos') {
+      filtered = filtered.filter(m => m.activo === 0 || m.activo === false);
+    } else if (estado === 'todos') {
+      // Retornar sin modificar (todos)
+    } else {
+      // Por defecto (estado === 'activos' o sin definir), mostramos solo los activos
+      filtered = filtered.filter(m => m.activo !== 0 && m.activo !== false);
+    }
+
+    res.json(filtered);
   } catch (error) {
     console.error('Error al listar médicos:', error);
     res.status(500).json({ message: 'Error al listar médicos' });
@@ -215,7 +241,8 @@ exports.exportarTodos = async (req, res) => {
 exports.exportarFiltrados = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
-    const { search, activo, anio, mes } = req.query;
+    // Utilizamos también 'estado' para hacer coincidir con listar
+    const { search, estado, anio, mes } = req.query;
 
     const anioFiltro = anio ? parseInt(anio) : new Date().getFullYear();
     const mesFiltro = mes ? parseInt(mes) : null;
@@ -225,14 +252,19 @@ exports.exportarFiltrados = async (req, res) => {
     if (search) {
       const term = search.toLowerCase();
       filtered = filtered.filter(m => 
-        m.nombre.toLowerCase().includes(term) ||
-        (m.especialidad && m.especialidad.toLowerCase().includes(term))
+        (m.nombre && m.nombre.toLowerCase().includes(term)) ||
+        (m.especialidad && m.especialidad.toLowerCase().includes(term)) ||
+        (m.numero_licencia && String(m.numero_licencia).toLowerCase().includes(term))
       );
     }
-    if (activo === 'true') {
-      filtered = filtered.filter(m => m.activo === 1);
-    } else if (activo === 'false') {
-      filtered = filtered.filter(m => m.activo === 0);
+    
+    // Mismo filtrado de estado que 'listar'
+    if (estado === 'inactivos') {
+      filtered = filtered.filter(m => m.activo === 0 || m.activo === false);
+    } else if (estado === 'todos') {
+      // sin filtro
+    } else {
+      filtered = filtered.filter(m => m.activo !== 0 && m.activo !== false);
     }
 
     if (filtered.length === 0) {

@@ -92,46 +92,20 @@ exports.obtenerOrganizacionPorId = async (req, res) => {
 exports.crearOrganizacion = async (req, res) => {
   try {
      const {
-      nombre_empresa,
-      nombre_comercial,
-      direccion,
-      telefono,
-      telefono_whatsapp,
-      nit,
-      nrc,
-      tipo_contribuyente,
-      tipo_organizacion,
-      ambiente,
-      token_mh,
-      llave_privada_p12,
-      logo_url,
-      correo_admin,
-      nombre_admin,
-      password_admin,
-      id_departamento,
-      id_municipio,
-      direccion_linea,
-      codigo_giro,
-      plan_id = 1,
-      whatsapp_activado = true,
-      limite_facturas = 40,
-      limite_whatsapp = 200,
+      nombre_empresa, nombre_comercial, direccion, telefono, telefono_whatsapp, nit, nrc,
+      tipo_contribuyente, tipo_organizacion, ambiente, token_mh, llave_privada_p12, logo_url,
+      correo_admin, nombre_admin, password_admin, id_departamento, id_municipio, direccion_linea,
+      codigo_giro, plan_id = 1, whatsapp_activado = true, citas_activado = false, dte_activado = true,
+      limite_facturas = 40, limite_whatsapp = 200,
     } = req.body;
 
-    // Verificar si Multer atrapó un archivo en req.file
     let logoUrlFinal = logo_url ? logo_url.trim() : '';
-    if (req.file) {
-      // Guardamos la ruta relativa para poder servirla después
-      logoUrlFinal = `/uploads/logos/${req.file.filename}`;
-    }
+    if (req.file) logoUrlFinal = `/uploads/logos/${req.file.filename}`;
 
     const tipoOrg = normalizarTipoOrganizacion(tipo_organizacion);
-
-    // Normalizar teléfonos
     const telefonoNormalizado = telefono ? normalizarTelefono(telefono) : '';
     const telefonoWhatsappNormalizado = telefono_whatsapp ? normalizarTelefono(telefono_whatsapp) : '';
 
-    // Validaciones
     const errores = [];
     if (!nombre_empresa || nombre_empresa.trim() === '') errores.push('Nombre de empresa es obligatorio');
     if (!nit || nit.trim() === '') errores.push('NIT es obligatorio');
@@ -139,108 +113,62 @@ exports.crearOrganizacion = async (req, res) => {
     if (!password_admin || password_admin.length < 6) errores.push('La contraseña debe tener al menos 6 caracteres');
     if (!tipo_contribuyente) errores.push('Tipo de contribuyente es obligatorio');
 
-    if (errores.length > 0) {
-      return res.status(400).json({ message: 'Errores de validación', errores });
-    }
+    if (errores.length > 0) return res.status(400).json({ message: 'Errores de validación', errores });
 
-    // Validar que el correo no exista
-    const [existingUser] = await pool.query(
-      'SELECT id FROM usuarios WHERE correo = ?',
-      [correo_admin]
-    );
-    if (existingUser.length > 0) {
-      return res.status(400).json({ message: 'El correo del administrador ya está registrado' });
-    }
+    const [existingUser] = await pool.query('SELECT id FROM usuarios WHERE correo = ?', [correo_admin]);
+    if (existingUser.length > 0) return res.status(400).json({ message: 'El correo del administrador ya está registrado' });
 
-    // Validar que el NIT no exista
-    const [existingNit] = await pool.query(
-      'SELECT id FROM organizaciones WHERE nit = ?',
-      [nit]
-    );
-    if (existingNit.length > 0) {
-      return res.status(400).json({ message: 'El NIT ya está registrado' });
-    }
+    const [existingNit] = await pool.query('SELECT id FROM organizaciones WHERE nit = ?', [nit]);
+    if (existingNit.length > 0) return res.status(400).json({ message: 'El NIT ya está registrado' });
 
-    // Validar NRC (si se proporciona) que no esté duplicado
     if (nrc && nrc.trim() !== '') {
-      const [existingNrc] = await pool.query(
-        'SELECT id FROM organizaciones WHERE nrc = ?',
-        [nrc]
-      );
-      if (existingNrc.length > 0) {
-        return res.status(400).json({ message: 'El NRC ya está registrado' });
-      }
+      const [existingNrc] = await pool.query('SELECT id FROM organizaciones WHERE nrc = ?', [nrc]);
+      if (existingNrc.length > 0) return res.status(400).json({ message: 'El NRC ya está registrado' });
     }
 
-    const ambienteMap = {
-      'Pruebas': '00',
-      'Producción': '01',
-    };
+    const ambienteMap = { 'Pruebas': '00', 'Producción': '01' };
     const ambienteDB = ambienteMap[ambiente] || '00';
 
-    // --- NUEVO: Normalizar booleanos y enteros para evitar fallos al recibir FormData ---
-    const isWhatsappActivo = whatsapp_activado === true || 
-                             whatsapp_activado === 'true' || 
-                             whatsapp_activado === 1 || 
-                             whatsapp_activado === '1';
-    const limitFacturasVal = parseInt(limite_facturas, 10) || 40;
+    // Normalizar booleanos
+    const isWhatsappActivo = whatsapp_activado === true || whatsapp_activado === 'true' || whatsapp_activado === 1 || whatsapp_activado === '1';
+    const isCitasActivo = citas_activado === true || citas_activado === 'true' || citas_activado === 1 || citas_activado === '1';
+    const isDteActivo = dte_activado === true || dte_activado === 'true' || dte_activado === 1 || dte_activado === '1';
+    
+    // Lógica: Si DTE está inactivo, límite de facturas es 0
+    const limitFacturasVal = isDteActivo ? (parseInt(limite_facturas, 10) || 40) : 0;
     const limitWhatsappVal = isWhatsappActivo ? (parseInt(limite_whatsapp, 10) || 0) : 0;
-    // ------------------------------------------------------------------------------------
 
-    // Insertar organización con todos los campos incluyendo los DTE
-     const [orgResult] = await pool.query(
+    // Insertar organización
+    const [orgResult] = await pool.query(
       `INSERT INTO organizaciones 
       (nombre_empresa, nombre_comercial, direccion, telefono, telefono_whatsapp, 
         nit, nrc, tipo_contribuyente, tipo_organizacion, ambiente, 
         token_mh, llave_privada_p12, logo_url, estado,
         id_departamento, id_municipio, direccion_linea, codigo_giro,
-        plan_id, whatsapp_activado, limite_facturas, limite_whatsapp) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        plan_id, whatsapp_activado, citas_activado, dte_activado, limite_facturas, limite_whatsapp) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        nombre_empresa.trim(),
-        nombre_comercial ? nombre_comercial.trim() : '',
-        direccion ? direccion.trim() : '',
-        telefonoNormalizado,
-        telefonoWhatsappNormalizado,
-        nit.trim(),
-        nrc ? nrc.trim() : '',
-        tipo_contribuyente,
-        tipoOrg,
-        ambienteDB,
-        token_mh || null,
-        llave_privada_p12 || null,
-        logoUrlFinal,
-        'Activo',
-        id_departamento || null,
-        id_municipio || null,
-        direccion_linea || null,
-        codigo_giro || '62010',
-        plan_id,
-        isWhatsappActivo ? 1 : 0,
-        limitFacturasVal,
-        limitWhatsappVal,
+        nombre_empresa.trim(), nombre_comercial ? nombre_comercial.trim() : '', direccion ? direccion.trim() : '',
+        telefonoNormalizado, telefonoWhatsappNormalizado, nit.trim(), nrc ? nrc.trim() : '',
+        tipo_contribuyente, tipoOrg, ambienteDB, token_mh || null, llave_privada_p12 || null,
+        logoUrlFinal, 'Activo', id_departamento || null, id_municipio || null, direccion_linea || null,
+        codigo_giro || '62010', plan_id,
+        isWhatsappActivo ? 1 : 0, isCitasActivo ? 1 : 0, isDteActivo ? 1 : 0, 
+        limitFacturasVal, limitWhatsappVal,
       ]
     );
     const organizacion_id = orgResult.insertId;
 
-    // Crear usuario administrador
     const hashedPassword = await bcrypt.hash(password_admin, 10);
     await pool.query(
-      `INSERT INTO usuarios (organizacion_id, nombre, correo, password, rol, estado)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO usuarios (organizacion_id, nombre, correo, password, rol, estado) VALUES (?, ?, ?, ?, ?, ?)`,
       [organizacion_id, nombre_admin || 'Administrador', correo_admin.trim(), hashedPassword, 'Admin', 'Activo']
     );
 
-    res.status(201).json({
-      message: 'Organización creada exitosamente',
-      organizacion_id,
-      usuario_admin: correo_admin
-    });
+    res.status(201).json({ message: 'Organización creada exitosamente', organizacion_id, usuario_admin: correo_admin });
   } catch (error) {
     console.error('Error al crear organización:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ message: 'El NIT o NRC ya está registrado' });
-    }
+    if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: 'El NIT o NRC ya está registrado' });
     res.status(500).json({ message: 'Error al crear organización: ' + error.message });
   }
 };
@@ -250,88 +178,44 @@ exports.actualizarOrganizacion = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      nombre_empresa,
-      nombre_comercial,
-      direccion,
-      telefono,
-      telefono_whatsapp,
-      nit,
-      nrc,
-      tipo_contribuyente,
-      tipo_organizacion,
-      ambiente,
-      token_mh,
-      llave_privada_p12,
-      logo_url,
-      id_departamento,
-      id_municipio,
-      direccion_linea,
-      codigo_giro,
-      plan_id,
-      whatsapp_activado,
-      limite_facturas,
-      limite_whatsapp,
+      nombre_empresa, nombre_comercial, direccion, telefono, telefono_whatsapp, nit, nrc,
+      tipo_contribuyente, tipo_organizacion, ambiente, token_mh, llave_privada_p12, logo_url,
+      id_departamento, id_municipio, direccion_linea, codigo_giro, plan_id,
+      whatsapp_activado, citas_activado, dte_activado, limite_facturas, limite_whatsapp,
     } = req.body;
 
     const tipoOrg = normalizarTipoOrganizacion(tipo_organizacion);
 
-    // Verificar si Multer atrapó un archivo en req.file
     let logoUrlFinal = logo_url ? logo_url.trim() : '';
-    if (req.file) {
-      // Si se subió un archivo nuevo, sobreescribimos con su ruta
-      logoUrlFinal = `/uploads/logos/${req.file.filename}`;
-    }
+    if (req.file) logoUrlFinal = `/uploads/logos/${req.file.filename}`;
 
-    // Normalizar teléfonos
     const telefonoNormalizado = telefono ? normalizarTelefono(telefono) : '';
     const telefonoWhatsappNormalizado = telefono_whatsapp ? normalizarTelefono(telefono_whatsapp) : '';
 
-    // Verificar que la organización exista y no sea SuperAdmin
-    const [org] = await pool.query(
-      'SELECT id FROM organizaciones WHERE id = ? AND nombre_empresa != "SuperAdmin"',
-      [id]
-    );
-    if (org.length === 0) {
-      return res.status(404).json({ message: 'Organización no encontrada' });
-    }
+    const [org] = await pool.query('SELECT id FROM organizaciones WHERE id = ? AND nombre_empresa != "SuperAdmin"', [id]);
+    if (org.length === 0) return res.status(404).json({ message: 'Organización no encontrada' });
 
-    // Validar que el NIT no esté duplicado (excepto esta organización)
     if (nit) {
-      const [existingNit] = await pool.query(
-        'SELECT id FROM organizaciones WHERE nit = ? AND id != ?',
-        [nit, id]
-      );
-      if (existingNit.length > 0) {
-        return res.status(400).json({ message: 'El NIT ya está registrado por otra organización' });
-      }
+      const [existingNit] = await pool.query('SELECT id FROM organizaciones WHERE nit = ? AND id != ?', [nit, id]);
+      if (existingNit.length > 0) return res.status(400).json({ message: 'El NIT ya está registrado por otra organización' });
     }
 
-    // Validar NRC duplicado
     if (nrc && nrc.trim() !== '') {
-      const [existingNrc] = await pool.query(
-        'SELECT id FROM organizaciones WHERE nrc = ? AND id != ?',
-        [nrc, id]
-      );
-      if (existingNrc.length > 0) {
-        return res.status(400).json({ message: 'El NRC ya está registrado por otra organización' });
-      }
+      const [existingNrc] = await pool.query('SELECT id FROM organizaciones WHERE nrc = ? AND id != ?', [nrc, id]);
+      if (existingNrc.length > 0) return res.status(400).json({ message: 'El NRC ya está registrado por otra organización' });
     }
 
-    // Mapear ambiente: 'Pruebas' -> '00', 'Producción' -> '01'
-    const ambienteMap = {
-      'Pruebas': '00',
-      'Producción': '01',
-    };
+    const ambienteMap = { 'Pruebas': '00', 'Producción': '01' };
     const ambienteDB = ambienteMap[ambiente] || '00';
 
-    // --- NUEVO: Normalizar booleanos y enteros para evitar fallos al recibir FormData ---
-    const isWhatsappActivo = whatsapp_activado === true || 
-                             whatsapp_activado === 'true' || 
-                             whatsapp_activado === 1 || 
-                             whatsapp_activado === '1';
-    const limitFacturasVal = parseInt(limite_facturas, 10) || 40;
+    // Normalizar booleanos
+    const isWhatsappActivo = whatsapp_activado === true || whatsapp_activado === 'true' || whatsapp_activado === 1 || whatsapp_activado === '1';
+    const isCitasActivo = citas_activado === true || citas_activado === 'true' || citas_activado === 1 || citas_activado === '1';
+    const isDteActivo = dte_activado === true || dte_activado === 'true' || dte_activado === 1 || dte_activado === '1';
+    
+    // Lógica: Si DTE está inactivo, límite de facturas es 0
+    const limitFacturasVal = isDteActivo ? (parseInt(limite_facturas, 10) || 40) : 0;
     const limitWhatsappVal = isWhatsappActivo ? (parseInt(limite_whatsapp, 10) || 0) : 0;
-    // ------------------------------------------------------------------------------------
 
     await pool.query(
       `UPDATE organizaciones SET
@@ -340,40 +224,25 @@ exports.actualizarOrganizacion = async (req, res) => {
         tipo_contribuyente = ?, tipo_organizacion = ?, ambiente = ?,
         token_mh = ?, llave_privada_p12 = ?, logo_url = ?,
         id_departamento = ?, id_municipio = ?, direccion_linea = ?, codigo_giro = ?,
-        plan_id = ?, whatsapp_activado = ?, limite_facturas = ?, limite_whatsapp = ?
+        plan_id = ?, whatsapp_activado = ?, citas_activado = ?, dte_activado = ?, 
+        limite_facturas = ?, limite_whatsapp = ?
       WHERE id = ?`,
       [
-        nombre_empresa ? nombre_empresa.trim() : '',
-        nombre_comercial ? nombre_comercial.trim() : '',
-        direccion ? direccion.trim() : '',
-        telefonoNormalizado,
-        telefonoWhatsappNormalizado,
-        nit ? nit.trim() : '',
-        nrc ? nrc.trim() : '',
-        tipo_contribuyente || 'Pequeño',
-        tipoOrg,
-        ambienteDB,
-        token_mh || null,
-        llave_privada_p12 || null,
-        logoUrlFinal,
-        id_departamento || null,
-        id_municipio || null,
-        direccion_linea || null,
-        codigo_giro || '62010',
-        plan_id || 1,
-        isWhatsappActivo ? 1 : 0,
-        limitFacturasVal,
-        limitWhatsappVal,
-        id
+        nombre_empresa ? nombre_empresa.trim() : '', nombre_comercial ? nombre_comercial.trim() : '',
+        direccion ? direccion.trim() : '', telefonoNormalizado, telefonoWhatsappNormalizado,
+        nit ? nit.trim() : '', nrc ? nrc.trim() : '', tipo_contribuyente || 'Pequeño',
+        tipoOrg, ambienteDB, token_mh || null, llave_privada_p12 || null, logoUrlFinal,
+        id_departamento || null, id_municipio || null, direccion_linea || null,
+        codigo_giro || '62010', plan_id || 1,
+        isWhatsappActivo ? 1 : 0, isCitasActivo ? 1 : 0, isDteActivo ? 1 : 0, 
+        limitFacturasVal, limitWhatsappVal, id
       ]
     );
 
     res.json({ message: 'Organización actualizada correctamente' });
   } catch (error) {
     console.error('Error al actualizar organización:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ message: 'El NIT o NRC ya está registrado' });
-    }
+    if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: 'El NIT o NRC ya está registrado' });
     res.status(500).json({ message: 'Error al actualizar organización: ' + error.message });
   }
 };

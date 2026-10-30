@@ -26,9 +26,9 @@ import ErrorMessage from '../../components/common/ErrorMessage';
 import PurchaseForm from '../../components/forms/PurchaseForm';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import { getTodayLocal } from '../../utils/dateUtils';
-import { Printer } from 'lucide-react';
 import { toast } from 'react-toastify';
 import {
+  Printer,
   Download,
   Plus,
   Edit3,
@@ -44,6 +44,7 @@ import {
   CreditCard,
   Users,
   CheckCircle,
+  ChevronDown
 } from 'lucide-react';
 import {
   LineChart,
@@ -61,7 +62,7 @@ import {
   Cell,
 } from 'recharts';
 
-const COLORS = ['#8b5cf6', '#f43f5e'];
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 const Purchases = () => {
   const [compras, setCompras] = useState([]);
@@ -71,6 +72,7 @@ const Purchases = () => {
   const tableRef = useRef(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const [openActionMenuId, setOpenActionMenuId] = useState(null); // Estado para el menú de acciones
 
   // Dashboard data
   const [dashboard, setDashboard] = useState(null);
@@ -113,6 +115,13 @@ const Purchases = () => {
 
   const COLORS = ['#8b5cf6', '#f43f5e', '#10b981', '#f59e0b', '#06b6d4'];
 
+  // Cerrar el menú de acciones si se hace clic afuera
+  useEffect(() => {
+    const handleClickOutside = () => setOpenActionMenuId(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   // Cargar años disponibles (solo años con datos)
   useEffect(() => {
     const loadAnios = async () => {
@@ -132,10 +141,8 @@ const Purchases = () => {
         }
       } catch (error) {
         console.error('Error cargando años disponibles:', error);
-        // Si falla, usar el año actual
         const year = new Date().getFullYear();
         setAniosDisponibles([year]);
-        // No mostrar error al usuario para no romper la UI
       }
     };
     loadAnios();
@@ -172,7 +179,6 @@ const Purchases = () => {
       setTopProductosData(topProductos || []);
     } catch (error) {
       console.error('Error loading gráficas:', error);
-      // No mostrar error al usuario para no romper la UI
     } finally {
       setLoadingGraficas(false);
     }
@@ -199,10 +205,7 @@ const Purchases = () => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Preparar los parámetros de filtro
       const params = { ...filtros };
-
-      // 2. Eliminar filtros vacíos para no enviarlos al backend
       if (!params.search) delete params.search;
       if (!params.proveedor_id) delete params.proveedor_id;
       if (!params.estado_comprobante) delete params.estado_comprobante;
@@ -210,18 +213,13 @@ const Purchases = () => {
       if (!params.tipo_egreso) delete params.tipo_egreso;
       if (!params.condicion_operacion) delete params.condicion_operacion;
       
-      // 3. Manejar el filtro de "solo con vencimiento"
-      // Si el usuario hizo clic en Alertas de Vencimiento, este filtro estará activo
       if (params.solo_con_vencimiento === 'true') {
-        // Lo dejamos como 'true' para que el backend filtre solo las que tienen fecha_vencimiento
+        // Mantiene el filtro
       } else {
-        delete params.solo_con_vencimiento; // Si no está activo, no lo enviamos
+        delete params.solo_con_vencimiento;
       }
 
-      // 4. Llamar a la API con los filtros
       const data = await getPurchases(params);
-
-      // 5. Actualizar el estado con los datos recibidos
       setCompras(data.compras || []);
       setPaginacion({
         total: data.total || 0,
@@ -292,6 +290,14 @@ const Purchases = () => {
     setFiltros(filtrosLimpios);
     setFiltrosTemp(filtrosLimpios);
     if (tableRef.current) setScrollPosition(0);
+  };
+
+  const volverMesActual = () => {
+    const hoy = new Date();
+    const anio = hoy.getFullYear();
+    const mes = (hoy.getMonth() + 1).toString();
+    setFiltros(prev => ({ ...prev, anio, mes, page: 1 }));
+    setFiltrosTemp(prev => ({ ...prev, anio, mes }));
   };
 
   const handleSearchKeyDown = (e) => {
@@ -391,21 +397,6 @@ const Purchases = () => {
     }
   };
 
-  const handleGenerarPDF = async (id) => {
-    try {
-      const blob = await generarPDFCompra(id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `comprobante_${id}.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      toast.success('PDF generado');
-    } catch (err) {
-      toast.error(err.message || 'Error al generar PDF');
-    }
-  };
-
   // Exportar
   const handleExportarTodas = async () => {
     try {
@@ -478,7 +469,7 @@ const Purchases = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `top_productos_compras_${filtros.mes}_${filtros.anio}.csv`;
+      a.download = `top_productos_compras_${filtros.mes || 'todos'}_${filtros.anio}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success('Top productos exportado');
@@ -487,7 +478,6 @@ const Purchases = () => {
     }
   };
 
-  // Al hacer clic en alertas, filtrar pendientes con crédito
   const handleAlertasClick = () => {
     setFiltros({
       ...filtros,
@@ -504,16 +494,14 @@ const Purchases = () => {
     });
   };
 
-  // Si hay un error crítico y no hay datos, mostrar mensaje
   if (loading && compras.length === 0 && !dashboard) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={loadData} />;
 
   const { total, page, totalPages } = paginacion;
-  const tieneFiltrosActivos = Object.values(filtros).some(v => v && v !== '' && v !== 1 && v !== false);
+  const tieneFiltrosActivos = Object.values(filtros).some(v => v && v !== '' && v !== 1 && v !== false && v !== new Date().getFullYear());
 
-  const { kpis, gastosPorMes, topProveedores, alertas, periodo } = dashboard || {};
+  const { kpis, gastosPorMes, topProveedores, alertas } = dashboard || {};
 
-  // Preparar datos para gráficas
   const mesesData = (gastosPorMes || []).map(item => ({
     mes: new Date(2024, item.mes - 1).toLocaleString('es', { month: 'short' }),
     compras: item.compras || 0,
@@ -527,7 +515,6 @@ const Purchases = () => {
     pendientes: item.pendientes || 0,
   }));
 
-  // Datos para gráfico de dona
   const totalCompras = kpis?.total_compras || 0;
   const totalGastos = kpis?.total_gastos || 0;
   const pieData = [
@@ -535,7 +522,6 @@ const Purchases = () => {
     { name: 'Gastos Operativos', value: totalGastos || 0 },
   ];
 
-  // Datos para top productos (barras horizontales)
   const topProductosChart = (topProductosData || []).map(item => ({
     name: item.producto || item.nombre || 'Producto',
     ingresos: item.total_ingresos || item.total || 0,
@@ -552,27 +538,6 @@ const Purchases = () => {
           <p className="text-xs text-gray-400 mt-0.5">Control de compras y gastos con DTE.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 bg-gray-900/50 px-3 py-1.5 rounded-lg border border-gray-700">
-            <Calendar className="w-4 h-4 text-purple-400" />
-            <span className="text-xs text-gray-300 font-semibold">Año:</span>
-            <select
-              value={filtros.anio}
-              onChange={(e) => {
-                const val = parseInt(e.target.value);
-                setFiltros(prev => ({ ...prev, anio: val, page: 1 }));
-                setFiltrosTemp(prev => ({ ...prev, anio: val }));
-              }}
-              className="bg-transparent border-none text-white text-sm font-bold focus:outline-none focus:ring-0 cursor-pointer"
-            >
-              {aniosDisponibles.length > 0 ? (
-                aniosDisponibles.map((year) => (
-                  <option key={year} value={year}>{year}</option>
-                ))
-              ) : (
-                <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
-              )}
-            </select>
-          </div>
           <button
             onClick={handleExportarTodas}
             className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
@@ -586,6 +551,50 @@ const Purchases = () => {
             <Plus size={14} /> Nueva Compra
           </button>
         </div>
+      </div>
+
+      {/* FILTRO DE PERÍODO (Banner estilo Vacunas) */}
+      <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3 flex flex-wrap items-center gap-3">
+        <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
+          <Calendar size={14} className="text-purple-400" /> Período
+        </span>
+        <select
+          value={filtros.anio}
+          onChange={(e) => {
+            const val = parseInt(e.target.value);
+            setFiltros(prev => ({ ...prev, anio: val, page: 1 }));
+            setFiltrosTemp(prev => ({ ...prev, anio: val }));
+          }}
+          className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white"
+        >
+          {aniosDisponibles.length > 0 ? (
+            aniosDisponibles.map((year) => (
+              <option key={year} value={year}>Año: {year}</option>
+            ))
+          ) : (
+            <option value={new Date().getFullYear()}>Año: {new Date().getFullYear()}</option>
+          )}
+        </select>
+        <select
+          value={filtros.mes}
+          onChange={(e) => {
+            const val = e.target.value;
+            setFiltros(prev => ({ ...prev, mes: val, page: 1 }));
+            setFiltrosTemp(prev => ({ ...prev, mes: val }));
+          }}
+          className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white"
+        >
+          <option value="">Todos los meses</option>
+          {MESES.map((n, i) => (
+            <option key={i + 1} value={i + 1}>{n}</option>
+          ))}
+        </select>
+        <button
+          onClick={volverMesActual}
+          className="text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 font-semibold transition"
+        >
+          Mes Actual
+        </button>
       </div>
 
       {/* KPIs */}
@@ -709,14 +718,12 @@ const Purchases = () => {
                   outerRadius={65}
                   fill="#8884d8"
                   dataKey="value"
-                  // Eliminamos las labels de texto para que no se corten
                 >
                   {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
-                {/* Agregamos una Leyenda lateral para evitar textos cortados */}
                 <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '11px', color: '#e5e7eb' }} />
               </RePieChart>
             </ResponsiveContainer>
@@ -725,7 +732,7 @@ const Purchases = () => {
           {/* Gráfica 4: Top 5 Productos Comprados (barras horizontales) */}
           <div className="bg-gray-800/90 p-3 rounded-xl shadow-lg border border-gray-700">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="...">Top 5 Productos {filtros.mes ? `(${filtros.mes}/${filtros.anio})` : `(${filtros.anio})`}</h3>
+              <h3 className="text-sm font-semibold text-gray-200">Top 5 Productos {filtros.mes ? `(${filtros.mes}/${filtros.anio})` : `(${filtros.anio})`}</h3>
               <button
                 onClick={handleExportarTopProductos}
                 className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 transition"
@@ -735,15 +742,12 @@ const Purchases = () => {
             </div>
             {topProductosChart.some(d => d.ingresos > 0) ? (
               <ResponsiveContainer width="100%" height={180}>
-                {/* Reducimos márgenes y ajustamos la tabla para que quepan los 5 */}
                 <BarChart data={topProductosChart} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
                   <XAxis type="number" stroke="#9ca3af" fontSize={10} />
-                  {/* interval={0} fuerza a que se rendericen los 5 productos aunque estén apretados */}
                   <YAxis dataKey="name" type="category" stroke="#9ca3af" fontSize={9} width={90} interval={0} />
                   <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }} />
                   <Bar dataKey="ingresos" barSize={15}>
-                    {/* Hacemos un map para darle un color diferente de la paleta a cada producto */}
                     {topProductosChart.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
@@ -756,7 +760,6 @@ const Purchases = () => {
               </div>
             )}
           </div>
-
         </div>
       )}
 
@@ -784,13 +787,12 @@ const Purchases = () => {
                     {alertas.slice(0, 5).map((a, i) => {
                       const dias = Math.ceil((new Date(a.fecha_vencimiento) - new Date()) / (1000 * 60 * 60 * 24));
                       
-                      // Lógica corregida para identificar facturas vencidas
                       let textoDias = `${dias} días`;
                       let color = 'text-emerald-400';
                       
                       if (dias < 0) {
                         textoDias = `Vencida (hace ${Math.abs(dias)} d)`;
-                        color = 'text-rose-600 font-bold'; // Rojo intenso para vencidas
+                        color = 'text-rose-600 font-bold';
                       } else if (dias === 0) {
                         textoDias = 'Vence hoy';
                         color = 'text-rose-500 font-bold';
@@ -855,7 +857,7 @@ const Purchases = () => {
         </div>
       )}
 
-      {/* FILTROS */}
+      {/* FILTROS ADICIONALES (Búsqueda, Estados) */}
       <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -940,25 +942,6 @@ const Purchases = () => {
               <option value="Gasto_Operativo">Gasto Operativo</option>
             </select>
             <select
-              value={filtrosTemp.mes}
-              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, mes: e.target.value })}
-              className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              <option value="">Todos los meses</option>
-              <option value="1">Enero</option>
-              <option value="2">Febrero</option>
-              <option value="3">Marzo</option>
-              <option value="4">Abril</option>
-              <option value="5">Mayo</option>
-              <option value="6">Junio</option>
-              <option value="7">Julio</option>
-              <option value="8">Agosto</option>
-              <option value="9">Septiembre</option>
-              <option value="10">Octubre</option>
-              <option value="11">Noviembre</option>
-              <option value="12">Diciembre</option>
-            </select>
-            <select
               value={filtrosTemp.condicion_operacion}
               onChange={(e) => setFiltrosTemp({ ...filtrosTemp, condicion_operacion: e.target.value })}
               className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -985,7 +968,7 @@ const Purchases = () => {
         )}
       </div>
 
-      {/* TABLA */}
+      {/* TABLA DE COMPRAS */}
       <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 overflow-hidden">
         <div className="px-4 py-2.5 border-b border-gray-700/80 bg-gray-800/40 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -997,18 +980,18 @@ const Purchases = () => {
           </span>
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div ref={tableRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">N° Comprobante</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Proveedor</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Tipo</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Total</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Condición</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">N° Comprobante</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Proveedor</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Tipo</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Total</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Condición</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -1020,100 +1003,131 @@ const Purchases = () => {
                   </td>
                 </tr>
               ) : (
-                compras.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{c.numero_comprobante}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{c.proveedor_nombre}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
-                      {new Date(c.fecha_registro).toLocaleDateString('es-SV')}
-                    </td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
-                      {c.tipo_documento === 'Credito_Fiscal' ? 'CCF' :
-                       c.tipo_documento === 'Consumidor_Final' ? 'FCF' :
-                       c.tipo_documento === 'Sujeto_Excluido' ? 'FSE' : c.tipo_documento}
-                    </td>
-                    <td className="px-2 py-1.5 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(c.total).toFixed(2)}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
-                      {c.estado_comprobante === 'Pagado' ? (
-                        <span className="text-emerald-400 font-semibold">Pagado</span>
-                      ) : c.estado_comprobante === 'Cancelado' ? (
-                        <span className="text-gray-500 font-semibold">Cancelado</span>
-                      ) : c.estado_comprobante === 'Pendiente' && c.condicion_operacion === 'Credito' ? (
-                        <span className="text-amber-400 font-semibold">Pendiente (Crédito)</span>
-                      ) : (
-                        <span className="text-yellow-400 font-semibold">Pendiente</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{c.condicion_operacion || 'Contado'}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => handleVerDetalle(c.id)}
-                          title="Ver detalle"
-                          className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                compras.map((c, index) => {
+                  // Lógica para que las últimas 3 filas abran hacia arriba (si hay más de 4 registros)
+                  const esUltimasFilas = index >= compras.length - 3 && compras.length > 4;
+                  return (
+                    <tr key={c.id} className="hover:bg-gray-700/30 transition-colors">
+                      <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">{c.numero_comprobante}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{c.proveedor_nombre}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
+                        {new Date(c.fecha_registro).toLocaleDateString('es-SV')}
+                      </td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
+                        {c.tipo_documento === 'Credito_Fiscal' ? 'CCF' :
+                        c.tipo_documento === 'Consumidor_Final' ? 'FCF' :
+                        c.tipo_documento === 'Sujeto_Excluido' ? 'FSE' : c.tipo_documento}
+                      </td>
+                      <td className="px-2 py-1 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(c.total).toFixed(2)}</td>
+                      <td className="px-2 py-1 whitespace-nowrap">
+                        {c.estado_comprobante === 'Pagado' ? (
+                          <span className="text-emerald-400 font-semibold">Pagado</span>
+                        ) : c.estado_comprobante === 'Cancelado' ? (
+                          <span className="text-gray-500 font-semibold">Cancelado</span>
+                        ) : c.estado_comprobante === 'Pendiente' && c.condicion_operacion === 'Credito' ? (
+                          <span className="text-amber-400 font-semibold">Pendiente (Crédito)</span>
+                        ) : (
+                          <span className="text-yellow-400 font-semibold">Pendiente</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{c.condicion_operacion || 'Contado'}</td>
+                      
+                      {/* MENÚ DESPLEGABLE DE ACCIONES */}
+                      <td className="px-2 py-1 whitespace-nowrap text-center">
+                        <div 
+                          className="relative group inline-block text-left"
+                          onMouseEnter={() => setOpenActionMenuId(c.id)}
+                          onMouseLeave={() => setOpenActionMenuId(null)}
                         >
-                          <Eye size={12} />
-                        </button>
-                        <button
-                          onClick={() => handleGenerarPDF(c.id)}
-                          title="Generar PDF"
-                          className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                        >
-                          <FileText size={12} />
-                        </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const blob = await generarPDFCompra(c.id);
-                              const url = window.URL.createObjectURL(blob);
-                              const printWindow = window.open(url, '_blank');
-                              if (printWindow) {
-                                printWindow.onload = () => {
-                                  printWindow.print();
-                                };
-                              }
-                              toast.success('Abriendo PDF para impresión');
-                            } catch (err) {
-                              toast.error('Error al abrir el PDF');
-                            }
-                          }}
-                          title="Imprimir PDF"
-                          className="px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white border border-indigo-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                        >
-                          <Printer size={12} />
-                        </button>
-
-                        {c.estado_comprobante === 'Pendiente' && (
                           <button
-                            onClick={() => handleMarcarPagada(c.id, c.numero_comprobante)}
-                            title="Marcar como pagada"
-                            className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenActionMenuId(openActionMenuId === c.id ? null : c.id);
+                            }}
+                            className="inline-flex justify-center items-center w-full rounded-md border border-gray-600 shadow-sm px-2 py-1 bg-gray-800 text-xs font-medium text-gray-300 hover:bg-gray-700 focus:outline-none transition-colors"
                           >
-                            <CheckCircle size={12} />
+                            Acciones 
+                            <ChevronDown 
+                              className={`-mr-1 ml-1 h-3 w-3 transition-transform duration-200 ${
+                                openActionMenuId === c.id 
+                                  ? esUltimasFilas ? 'rotate-0' : 'rotate-180' 
+                                  : esUltimasFilas ? 'rotate-180 group-hover:rotate-0' : 'group-hover:rotate-180'
+                              }`} 
+                            />
                           </button>
-                        )}
-                        {c.estado_comprobante !== 'Pagado' && c.estado_comprobante !== 'Cancelado' && (
-                          <>
-                            <button
-                              onClick={() => { setEditing(c); setShowForm(true); }}
-                              title="Editar"
-                              className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                            >
-                              <Edit3 size={12} />
-                            </button>
-                            <button
-                              onClick={() => handleCancel(c.id, c.numero_comprobante)}
-                              title="Cancelar"
-                              className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+
+                          {openActionMenuId === c.id && (
+                            <div className={`absolute right-0 w-44 rounded-xl shadow-2xl bg-gray-800/95 backdrop-blur-sm border border-gray-700 p-2 z-50 flex flex-col gap-1.5 transition-all duration-150 ${esUltimasFilas ? 'bottom-full -mb-2 origin-bottom-right' : 'top-full -mt-3 origin-top-right'}`}>
+                              
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleVerDetalle(c.id); setOpenActionMenuId(null); }}
+                                className="group flex items-center w-full px-3 py-2 text-xs font-semibold text-gray-200 bg-gray-900/60 hover:bg-gray-700 border border-gray-700/50 rounded-lg transition-all"
+                              >
+                                <Eye className="mr-2 h-3.5 w-3.5 text-cyan-400" />
+                                Ver Detalle
+                              </button>
+                              
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  setOpenActionMenuId(null);
+                                  try {
+                                    const blob = await generarPDFCompra(c.id);
+                                    const url = window.URL.createObjectURL(blob);
+                                    const printWindow = window.open(url, '_blank');
+                                    if (printWindow) {
+                                      printWindow.onload = () => printWindow.print();
+                                    }
+                                    toast.success('Abriendo PDF para impresión');
+                                  } catch (err) {
+                                    toast.error('Error al abrir el PDF');
+                                  }
+                                }}
+                                className="group flex items-center w-full px-3 py-2 text-xs font-semibold text-gray-200 bg-gray-900/60 hover:bg-gray-700 border border-gray-700/50 rounded-lg transition-all"
+                              >
+                                <Printer className="mr-2 h-3.5 w-3.5 text-indigo-400" />
+                                Imprimir PDF
+                              </button>
+                              
+                              {(c.estado_comprobante === 'Pendiente' || (c.estado_comprobante !== 'Pagado' && c.estado_comprobante !== 'Cancelado')) && (
+                                <>
+                                  {c.estado_comprobante === 'Pendiente' && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleMarcarPagada(c.id, c.numero_comprobante); setOpenActionMenuId(null); }}
+                                      className="group flex items-center w-full px-3 py-2 text-xs font-semibold text-emerald-100 bg-emerald-900/20 hover:bg-emerald-800/40 border border-emerald-800/30 hover:border-emerald-500/50 rounded-lg transition-all"
+                                    >
+                                      <CheckCircle className="mr-2 h-3.5 w-3.5 text-emerald-400" />
+                                      Marcar Pagada
+                                    </button>
+                                  )}
+                                  {c.estado_comprobante !== 'Pagado' && c.estado_comprobante !== 'Cancelado' && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setEditing(c); setShowForm(true); setOpenActionMenuId(null); }}
+                                      className="group flex items-center w-full px-3 py-2 text-xs font-semibold text-gray-200 bg-gray-900/60 hover:bg-gray-700 border border-gray-700/50 rounded-lg transition-all"
+                                    >
+                                      <Edit3 className="mr-2 h-3.5 w-3.5 text-yellow-400" />
+                                      Editar Compra
+                                    </button>
+                                  )}
+                                </>
+                              )}
+
+                              {c.estado_comprobante !== 'Pagado' && c.estado_comprobante !== 'Cancelado' && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleCancel(c.id, c.numero_comprobante); setOpenActionMenuId(null); }}
+                                  className="group flex items-center w-full px-3 py-2 text-xs font-semibold text-rose-200 bg-rose-900/20 hover:bg-rose-800/40 border border-rose-800/30 hover:border-rose-500/50 rounded-lg transition-all mt-1"
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5 text-rose-400" />
+                                  Anular / Cancelar
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -1227,7 +1241,6 @@ const Purchases = () => {
               </div>
             </div>
             <div className="flex justify-end gap-2 p-3 border-t border-gray-700">
-              {/* Botón de Imprimir directo */}
               <button
                 onClick={async () => {
                   try {

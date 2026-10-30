@@ -152,7 +152,6 @@ class HistorialVacuna {
     const anioFiltro = anio || new Date().getFullYear();
     const mesFiltro = mes ? parseInt(mes) : null;
 
-    // Aplicaciones en el período
     let sqlAplic = `
       SELECT COUNT(*) AS total FROM historial_vacunas
       WHERE organizacion_id = ? AND YEAR(fecha_aplicacion) = ?
@@ -164,25 +163,25 @@ class HistorialVacuna {
     }
     const [aplicadas] = await pool.query(sqlAplic, paramsAplic);
 
-    // Próximas (30 días global)
-    const [proximas] = await pool.query(
-      `SELECT COUNT(*) AS total FROM historial_vacunas
-       WHERE organizacion_id = ? 
-         AND fecha_proxima IS NOT NULL
-         AND fecha_proxima BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)`,
-      [organizacion_id]
-    );
+    // Usamos ROW_NUMBER para obtener el ÚLTIMO registro por paciente y vacuna
+    const [estados] = await pool.query(`
+      WITH UltimosEstados AS (
+        SELECT 
+          fecha_proxima,
+          ROW_NUMBER() OVER(PARTITION BY paciente_id, vacuna_id ORDER BY fecha_aplicacion DESC, id DESC) as rn
+        FROM historial_vacunas
+        WHERE organizacion_id = ? AND fecha_proxima IS NOT NULL
+      )
+      SELECT 
+        SUM(CASE WHEN fecha_proxima < CURDATE() THEN 1 ELSE 0 END) AS vencidas,
+        SUM(CASE WHEN fecha_proxima >= CURDATE() AND fecha_proxima <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS proximas
+      FROM UltimosEstados
+      WHERE rn = 1
+    `, [organizacion_id]);
 
-    // Vencidas (desprotegidas)
-    const [vencidas] = await pool.query(
-      `SELECT COUNT(*) AS total FROM historial_vacunas
-       WHERE organizacion_id = ? 
-         AND fecha_proxima IS NOT NULL
-         AND fecha_proxima < CURDATE()`,
-      [organizacion_id]
-    );
+    const vencidas = parseInt(estados[0]?.vencidas || 0);
+    const proximas = parseInt(estados[0]?.proximas || 0);
 
-    // Top 5 vacunas más aplicadas
     let sqlTop = `
       SELECT v.id, v.nombre, COUNT(h.id) AS total
       FROM historial_vacunas h
@@ -206,8 +205,8 @@ class HistorialVacuna {
 
     return {
       aplicadasMes: aplicadas[0]?.total || 0,
-      proximas: proximas[0]?.total || 0,
-      vencidas: vencidas[0]?.total || 0,
+      proximas,
+      vencidas,
       topVacunas: topVacunas || [],
       aniosDisponibles: anios.length ? anios.map((a) => a.anio) : [new Date().getFullYear()],
     };
@@ -226,45 +225,78 @@ class HistorialVacuna {
   }
 
   // Obtener historial global filtrado por mes, año y estado
-  static async findAllGlobal(organizacion_id, anio, mes, filtro = 'todas') {
-    let sql = `
-      SELECT 
-        h.id, h.fecha_aplicacion, h.fecha_proxima, h.lote, h.observaciones,
-        v.nombre AS vacuna_nombre,
-        p.nombre AS paciente_nombre, p.apellidos AS paciente_apellidos, p.especie,
-        c.nombre AS cliente_nombre, c.telefono_whatsapp,
-        u.nombre AS medico_nombre,
-        DATEDIFF(h.fecha_proxima, CURDATE()) AS dias_restantes
-      FROM historial_vacunas h
-      JOIN vacunas v ON h.vacuna_id = v.id
-      JOIN pacientes p ON h.paciente_id = p.id
-      JOIN clientes c ON p.cliente_id = c.id
-      LEFT JOIN medicos m ON h.medico_id = m.id
-      LEFT JOIN usuarios u ON m.usuario_id = u.id
-      WHERE h.organizacion_id = ?
+  static async findAllGlobal(organizacion_id, anio, mes, filtro = 'todas', page = 1, limit = 10) {
+    const offset = (page - 1) * limit;
+
+    // Base de la consulta que obtiene solo el ÚLTIMO registro por paciente y vacuna
+    let baseSql = `
+      WITH UltimosEstados AS (
+        SELECT h.*, 
+               ROW_NUMBER() OVER(PARTITION BY h.paciente_id, h.vacuna_id ORDER BY h.fecha_aplicacion DESC, h.id DESC) as rn
+        FROM historial_vacunas h
+        WHERE h.organizacion_id = ?
     `;
     const params = [organizacion_id];
 
     if (anio) {
-      sql += ' AND YEAR(h.fecha_aplicacion) = ?';
+      baseSql += ' AND YEAR(h.fecha_aplicacion) = ?';
       params.push(parseInt(anio));
     }
     if (mes) {
-      sql += ' AND MONTH(h.fecha_aplicacion) = ?';
+      baseSql += ' AND MONTH(h.fecha_aplicacion) = ?';
       params.push(parseInt(mes));
     }
 
-    if (filtro === 'aplicadas') {
-      sql += ' AND (h.fecha_proxima IS NULL OR h.fecha_proxima >= CURDATE())';
+    baseSql += ` ) SELECT * FROM UltimosEstados WHERE rn = 1`;
+
+    // Aplicamos el filtro de estado
+    let filtroSql = '';
+    if (filtro === 'vencidas') {
+      filtroSql = ' AND fecha_proxima < CURDATE()';
     } else if (filtro === 'proximas') {
-      sql += ' AND h.fecha_proxima >= CURDATE() AND h.fecha_proxima <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)';
-    } else if (filtro === 'vencidas') {
-      sql += ' AND h.fecha_proxima < CURDATE()';
+      filtroSql = ' AND fecha_proxima >= CURDATE() AND fecha_proxima <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)';
+    } else if (filtro === 'aplicadas') {
+      filtroSql = ' AND (fecha_proxima IS NULL OR fecha_proxima >= CURDATE())';
     }
 
-    sql += ' ORDER BY h.fecha_aplicacion DESC';
-    const [rows] = await pool.query(sql, params);
-    return rows;
+    // Total de registros para paginación
+    const [countResult] = await pool.query(
+      `SELECT COUNT(*) AS total FROM (${baseSql} ${filtroSql}) AS sub`, 
+      params
+    );
+    const total = countResult[0].total;
+
+    // Consulta final con JOINs
+    const sqlData = `
+      SELECT 
+        u.id, u.paciente_id, u.fecha_aplicacion, u.fecha_proxima, u.lote, u.observaciones,
+        v.id AS vacuna_id, v.nombre AS vacuna_nombre,
+        p.nombre AS paciente_nombre, p.apellidos AS paciente_apellidos, p.especie,
+        c.nombre AS cliente_nombre, c.telefono_whatsapp,
+        us.nombre AS medico_nombre,
+        DATEDIFF(u.fecha_proxima, CURDATE()) AS dias_restantes
+      FROM (${baseSql} ${filtroSql}) AS u
+      JOIN vacunas v ON u.vacuna_id = v.id
+      JOIN pacientes p ON u.paciente_id = p.id
+      JOIN clientes c ON p.cliente_id = c.id
+      LEFT JOIN medicos m ON u.medico_id = m.id
+      LEFT JOIN usuarios us ON m.usuario_id = us.id
+      ORDER BY u.fecha_proxima ASC, u.fecha_aplicacion DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const dataParams = [...params, limit, offset];
+    const [rows] = await pool.query(sqlData, dataParams);
+
+    return {
+      data: rows,
+      paginacion: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
   }
 
 }

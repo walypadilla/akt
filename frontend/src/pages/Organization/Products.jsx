@@ -447,18 +447,18 @@ const Productos = () => {
           </span>
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div ref={tableRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Producto</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">SKU</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Tipo</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Stock</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Precio</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Categoría</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Producto</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">SKU</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Tipo</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Stock</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Precio</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Categoría</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -483,11 +483,11 @@ const Productos = () => {
                   }
                   return (
                     <tr key={p.id} className="hover:bg-gray-700/30 transition-colors">
-                      <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{p.nombre}</td>
-                      <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">
+                      <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">{p.nombre}</td>
+                      <td className="px-2 py-1 text-gray-300 font-mono whitespace-nowrap">
                         {p.codigo_sku ? <span className="bg-gray-900/60 px-1.5 py-0.5 rounded border border-gray-700">{p.codigo_sku}</span> : <span className="text-gray-500">-</span>}
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">
+                      <td className="px-2 py-1 whitespace-nowrap">
                         <span className={`px-2 py-0.5 text-xs font-bold rounded-full border ${
                           p.tipo === 'Servicio'
                             ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
@@ -497,44 +497,47 @@ const Productos = () => {
                         </span>
                         {p.es_kit && <span className="ml-1 px-1.5 py-0.5 text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-full">🧩</span>}
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">{stockDisplay}</td>
-                      <td className="px-2 py-1.5 text-emerald-400 font-mono font-bold whitespace-nowrap">${parseFloat(p.precio_unitario || 0).toFixed(2)}</td>
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
+                      <td className="px-2 py-1 whitespace-nowrap">{stockDisplay}</td>
+                      <td className="px-2 py-1 text-emerald-400 font-mono font-bold whitespace-nowrap">${parseFloat(p.precio_unitario || 0).toFixed(2)}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
                         {p.categoria_nombre ? <span className="flex items-center gap-1"><Tag size={12} className="text-purple-400" /> {p.categoria_nombre}</span> : <span className="text-gray-500">-</span>}
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">
+                      <td className="px-2 py-1 whitespace-nowrap">
                         {p.activo === 1 ? (
                           <span className="text-emerald-400 font-semibold">Activo</span>
                         ) : (
                           <span className="text-rose-400 font-semibold">Desactivado</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="px-2 py-1 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-2">
                           {p.activo === 1 ? (
                             <>
                               <button
                                 onClick={() => handleEditarProducto(p)}
                                 title="Editar producto"
-                                className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                                className="flex items-center gap-1.5 px-2.5 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold transition"
                               >
-                                <Edit3 size={12} />
+                                <Edit3 size={14} />
+                                <span>Editar</span>
                               </button>
                               <button
                                 onClick={() => handleDelete(p.id, p.nombre)}
                                 title="Desactivar producto"
-                                className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                                className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold transition"
                               >
-                                <Trash2 size={12} />
+                                <Trash2 size={14} />
+                                <span>Desactivar</span>
                               </button>
                             </>
                           ) : (
                             <button
                               onClick={() => handleReactivar(p.id, p.nombre)}
                               title="Reactivar producto"
-                              className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                              className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold transition"
                             >
-                              <RotateCcw size={12} />
+                              <RotateCcw size={14} />
+                              <span>Activar</span>
                             </button>
                           )}
                         </div>

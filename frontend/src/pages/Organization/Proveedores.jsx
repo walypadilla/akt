@@ -30,6 +30,7 @@ import {
   UserCheck,
   UserX,
   FileText,
+  Printer
 } from 'lucide-react';
 
 const Proveedores = () => {
@@ -276,16 +277,18 @@ const Proveedores = () => {
 
   const handleGenerarPDF = async (id) => {
     try {
-      const blob = await generarProveedorPDF(id);
+      const data = await generarProveedorPDF(id);
+      
+      // Nos aseguramos de que el navegador lo reconozca estrictamente como un documento PDF
+      const blob = new Blob([data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `proveedor_${id}.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      toast.success('PDF generado');
+      
+      // Abre el PDF en una nueva pestaña (habilita el visor nativo con opciones de imprimir)
+      window.open(url, '_blank');
+      
+      toast.success('Documento abierto para impresión');
     } catch (err) {
-      toast.error(err.message || 'Error al generar PDF');
+      toast.error(err.message || 'Error al abrir el documento');
     }
   };
 
@@ -482,19 +485,19 @@ const Proveedores = () => {
           </span>
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div ref={tableRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Razón Social</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Documento</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">NRC</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Giro</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Contribuyente</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Teléfono</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Email DTE</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Razón Social</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Documento</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">NRC</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Giro</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Contribuyente</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Teléfono</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Email DTE</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -508,55 +511,59 @@ const Proveedores = () => {
               ) : (
                 proveedores.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{p.razon_social}</td>
-                    <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">
+                    <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">{p.razon_social}</td>
+                    <td className="px-2 py-1 text-gray-300 font-mono whitespace-nowrap">
                       <span className="text-gray-500 text-[10px]">{p.tipo_documento}:</span> {p.numero_documento}
                     </td>
-                    <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">{p.nrc || '-'}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.descripcion_giro || '-'}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.tipo_contribuyente}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.telefono || '-'}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.email_dte || '-'}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
+                    <td className="px-2 py-1 text-gray-300 font-mono whitespace-nowrap">{p.nrc || '-'}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.descripcion_giro || '-'}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.tipo_contribuyente}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.telefono || '-'}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.email_dte || '-'}</td>
+                    <td className="px-2 py-1 whitespace-nowrap">
                       {p.activo === 1 ? (
                         <span className="text-emerald-400 font-semibold">Activo</span>
                       ) : (
                         <span className="text-rose-400 font-semibold">Inactivo</span>
                       )}
                     </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="px-2 py-1 whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => handleGenerarPDF(p.id)}
-                          title="Generar PDF"
-                          className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                          title="Imprimir PDF"
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold transition"
                         >
-                          <FileText size={12} />
+                          <Printer size={14} />
+                          <span>Imprimir</span>
                         </button>
                         {p.activo === 1 ? (
                           <>
                             <button
                               onClick={() => { setEditing(p); setShowForm(true); }}
                               title="Editar proveedor"
-                              className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                              className="flex items-center gap-1.5 px-2.5 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold transition"
                             >
-                              <Edit3 size={12} />
+                              <Edit3 size={14} />
+                              <span>Editar</span>
                             </button>
                             <button
                               onClick={() => handleDelete(p.id, p.razon_social)}
                               title="Desactivar proveedor"
-                              className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                              className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold transition"
                             >
-                              <Trash2 size={12} />
+                              <Trash2 size={14} />
+                              <span>Desactivar</span>
                             </button>
                           </>
                         ) : (
                           <button
                             onClick={() => handleReactivar(p.id, p.razon_social)}
                             title="Reactivar proveedor"
-                            className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold transition"
                           >
-                            <RotateCcw size={12} />
+                            <RotateCcw size={14} />
+                            <span>Activar</span>
                           </button>
                         )}
                       </div>

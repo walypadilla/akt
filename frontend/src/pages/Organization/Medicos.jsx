@@ -56,9 +56,10 @@ const Medicos = () => {
     try {
       setLoading(true);
       setError(null);
+      // Ahora enviamos search y estado para alinear con el backend corregido
       const params = {
-        ...(busqueda && { q: busqueda }),
-        ...(estadoFiltro !== 'todos' && { estado: estadoFiltro }),
+        ...(busqueda && { search: busqueda }),
+        estado: estadoFiltro,
         anio,
         mes,
       };
@@ -164,7 +165,7 @@ const Medicos = () => {
     }
   };
 
-  // ============ TOGGLE ESTADO (con ConfirmModal) ============
+  // ============ TOGGLE ESTADO ============
   const handleToggleEstado = (medico) => {
     const estaActivo = medico.activo ?? true;
     const accion = estaActivo ? 'Inactivar' : 'Reactivar';
@@ -223,8 +224,8 @@ const Medicos = () => {
   const handleExportarFiltrados = async () => {
     try {
       const params = {
-        ...(busqueda && { q: busqueda }),
-        ...(estadoFiltro !== 'todos' && { estado: estadoFiltro }),
+        ...(busqueda && { search: busqueda }),
+        estado: estadoFiltro,
         anio,
         mes,
       };
@@ -260,6 +261,7 @@ const Medicos = () => {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleExportarTodos}
+            title="Descargar el registro de todos los médicos en formato CSV"
             className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
           >
             <Download size={14} /> Exportar Todo
@@ -267,6 +269,7 @@ const Medicos = () => {
           <button
             onClick={handleExportarFiltrados}
             disabled={medicos.length === 0}
+            title="Descargar únicamente los médicos mostrados actualmente en la tabla"
             className="bg-cyan-600/20 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed text-cyan-300 hover:text-white border border-cyan-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
           >
             <Download size={14} /> Exportar Vista
@@ -274,6 +277,7 @@ const Medicos = () => {
           {puedeGestionarMedicos && (
             <button
               onClick={abrirModalNuevo}
+              title="Registrar un nuevo perfil de médico en el sistema"
               className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-md shadow-purple-900/30"
             >
               <Plus size={14} /> Nuevo Médico
@@ -288,6 +292,7 @@ const Medicos = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowFilters(!showFilters)}
+              title="Mostrar u ocultar la barra de filtros avanzados"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
                 showFilters
                   ? 'bg-purple-600 text-white border-purple-500'
@@ -308,6 +313,7 @@ const Medicos = () => {
             {tieneFiltrosActivos && (
               <button
                 onClick={limpiarFiltros}
+                title="Quitar todos los filtros aplicados y mostrar la lista original"
                 className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-semibold flex items-center gap-1 transition"
               >
                 <X size={12} /> Limpiar
@@ -337,6 +343,7 @@ const Medicos = () => {
             <select
               value={anio}
               onChange={(e) => setAnio(e.target.value)}
+              title="Filtrar desempeño por año"
               className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               {aniosDisponibles.map((a) => (
@@ -346,6 +353,7 @@ const Medicos = () => {
             <select
               value={mes}
               onChange={(e) => setMes(e.target.value)}
+              title="Filtrar desempeño por mes"
               className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="">Todos los meses</option>
@@ -356,6 +364,7 @@ const Medicos = () => {
             <select
               value={estadoFiltro}
               onChange={(e) => setEstadoFiltro(e.target.value)}
+              title="Mostrar médicos según su estado operativo"
               className="px-2 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="activos">Solo activos</option>
@@ -378,17 +387,17 @@ const Medicos = () => {
           </span>
         </div>
 
-        <div className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Especialidad</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Licencia</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Contacto</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Total Facturado</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Especialidad</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Licencia</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Contacto</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Total Facturado</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -403,7 +412,7 @@ const Medicos = () => {
                 <tr>
                   <td colSpan="7" className="px-4 py-10 text-center text-gray-400">
                     <Stethoscope className="w-8 h-8 mx-auto text-gray-600 mb-1" />
-                    <p className="text-xs font-medium">No se encontraron médicos.</p>
+                    <p className="text-xs font-medium">No se encontraron médicos con los filtros aplicados.</p>
                   </td>
                 </tr>
               ) : (
@@ -447,33 +456,38 @@ const Medicos = () => {
                         ${Number(med.total_facturado || 0).toFixed(2)}
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => setDetalleMedicoId(med.id)}
-                            title="Ver detalle"
-                            className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold transition"
+                            title="Ver detalles, consultas y facturación del médico"
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold transition"
                           >
-                            <FileText size={12} />
+                            <FileText size={14} />
+                            <span>Detalle</span>
                           </button>
+                          
                           {puedeGestionarMedicos && (
                             <>
                               <button
                                 onClick={() => abrirModalEditar(med)}
-                                title="Editar médico"
-                                className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold transition"
+                                title="Modificar la especialidad o licencia del médico"
+                                className="flex items-center gap-1.5 px-2.5 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold transition"
                               >
-                                <Award size={12} />
+                                <Award size={14} />
+                                <span>Editar</span>
                               </button>
+                              
                               <button
                                 onClick={() => handleToggleEstado(med)}
-                                title={activo ? 'Inactivar' : 'Reactivar'}
-                                className={`px-2 py-1 border rounded text-xs font-semibold transition ${
+                                title={activo ? 'Desactivar a este médico' : 'Reactivar a este médico'}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 border rounded text-xs font-semibold transition ${
                                   activo
                                     ? 'bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border-rose-500/30'
                                     : 'bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border-emerald-500/30'
                                 }`}
                               >
-                                <Power size={12} />
+                                <Power size={14} />
+                                <span>{activo ? 'Desactivar' : 'Activar'}</span>
                               </button>
                             </>
                           )}

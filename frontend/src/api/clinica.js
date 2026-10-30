@@ -174,6 +174,11 @@ export const updateCitaStatus = async (id, estado) => {
   return response.data;
 };
 
+export const enviarWhatsAppCita = async (id) => {
+  const response = await apiClient.post(`/organization/citas/${id}/whatsapp`);
+  return response.data;
+};
+
 // ========== CONSULTAS ==========
 export const getAniosConsultas = async () => {
   const response = await apiClient.get('/organization/consultas/anios');
@@ -404,6 +409,11 @@ export const aplicarVacuna = async (data) => {
   return response.data;
 };
 
+export const editarAplicacionVacuna = async (id, data) => {
+  const response = await apiClient.put(`/organization/vacunas/aplicar/${id}`, data);
+  return response.data;
+};
+
 export const getProximasVacunas = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
   const response = await apiClient.get(`/organization/vacunas/proximas?${query}`);
@@ -452,6 +462,55 @@ export const exportarTopVacunas = async (params = {}) => {
   const response = await apiClient.get(`/organization/vacunas/exportar/top5?${query}`, {
     responseType: 'blob',
   });
+  return response.data;
+};
+
+// ========== HISTORIAL DE PESO ==========
+export const getKpisPeso = async () => {
+  const response = await apiClient.get('/organization/pesos/kpis');
+  return response.data;
+};
+
+export const getPacientesPeso = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(`/organization/pesos/pacientes?${query}`);
+  return response.data;
+};
+
+export const getHistorialPesoPaciente = async (pacienteId) => {
+  const response = await apiClient.get(`/organization/pesos/paciente/${pacienteId}`);
+  return response.data;
+};
+
+export const registrarPesoRapido = async (data) => {
+  const response = await apiClient.post('/organization/pesos/registro-rapido', data);
+  return response.data;
+};
+
+export const eliminarRegistroPeso = async (id) => {
+  const response = await apiClient.delete(`/organization/pesos/${id}`);
+  return response.data;
+};
+
+export const actualizarPesoIdeal = async (pacienteId, data) => {
+  const response = await apiClient.put(`/organization/pesos/paciente/${pacienteId}/ideal`, data);
+  return response.data;
+};
+
+export const exportarPesosFiltrados = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await apiClient.get(
+    `/organization/pesos/exportar/filtrados?${query}`,
+    { responseType: 'blob' }
+  );
+  return response.data;
+};
+
+export const exportarHistorialPesoPaciente = async (pacienteId) => {
+  const response = await apiClient.get(
+    `/organization/pesos/paciente/${pacienteId}/exportar`,
+    { responseType: 'blob' }
+  );
   return response.data;
 };
 

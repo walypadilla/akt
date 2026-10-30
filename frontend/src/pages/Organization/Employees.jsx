@@ -347,18 +347,18 @@ const Employees = () => {
           </span>
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div ref={tableRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Apellidos</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Salario</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">DUI</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">ISSS</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">AFP</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Apellidos</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Salario</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">DUI</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">ISSS</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">AFP</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -372,45 +372,48 @@ const Employees = () => {
               ) : (
                 empleados.map((e) => (
                   <tr key={e.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{e.nombre}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{e.apellidos || '-'}</td>
-                    <td className="px-2 py-1.5 text-emerald-400 font-mono font-bold whitespace-nowrap">${parseFloat(e.salario_base).toFixed(2)}</td>
-                    <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">{e.dui}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{e.isss_numero || '-'}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{e.afp_numero || '-'}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
+                    <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">{e.nombre}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{e.apellidos || '-'}</td>
+                    <td className="px-2 py-1 text-emerald-400 font-mono font-bold whitespace-nowrap">${parseFloat(e.salario_base).toFixed(2)}</td>
+                    <td className="px-2 py-1 text-gray-300 font-mono whitespace-nowrap">{e.dui}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{e.isss_numero || '-'}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{e.afp_numero || '-'}</td>
+                    <td className="px-2 py-1 whitespace-nowrap">
                       {e.activo === 1 ? (
                         <span className="text-emerald-400 font-semibold">Activo</span>
                       ) : (
                         <span className="text-rose-400 font-semibold">Inactivo</span>
                       )}
                     </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="px-2 py-1 whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-2">
                         {e.activo === 1 ? (
                           <>
                             <button
                               onClick={() => { setEditing(e); setShowModal(true); }}
                               title="Editar empleado"
-                              className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                              className="flex items-center gap-1.5 px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold transition"
                             >
-                              <Edit3 size={12} />
+                              <Edit3 size={14} />
+                              <span>Editar</span>
                             </button>
                             <button
                               onClick={() => handleDelete(e.id, e.nombre)}
                               title="Desactivar empleado"
-                              className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                              className="flex items-center gap-1.5 px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold transition"
                             >
-                              <Trash2 size={12} />
+                              <Trash2 size={14} />
+                              <span>Desactivar</span>
                             </button>
                           </>
                         ) : (
                           <button
                             onClick={() => handleReactivar(e.id, e.nombre)}
                             title="Reactivar empleado"
-                            className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                            className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold transition"
                           >
-                            <RotateCcw size={12} />
+                            <RotateCcw size={14} />
+                            <span>Activar</span>
                           </button>
                         )}
                       </div>

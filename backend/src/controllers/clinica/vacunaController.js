@@ -1,3 +1,4 @@
+// backend/src/controllers/vacunaController.js
 const Vacuna = require('../../models/Vacuna');
 const HistorialVacuna = require('../../models/HistorialVacuna');
 const Medico = require('../../models/Medico');
@@ -17,7 +18,6 @@ exports.listarVacunas = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
     const { activo } = req.query;
-    // Por defecto trae TODAS
     const soloActivos = activo === 'true';
     const vacunas = await Vacuna.findAll(organizacion_id, soloActivos);
     res.json(vacunas);
@@ -130,7 +130,6 @@ exports.aplicarVacuna = async (req, res) => {
       fecha_aplicacion, fecha_proxima, lote, observaciones,
     } = req.body;
 
-    // Validaciones
     if (!consulta_id) {
       await connection.rollback();
       return res.status(400).json({
@@ -156,7 +155,6 @@ exports.aplicarVacuna = async (req, res) => {
       return res.status(404).json({ message: 'Vacuna no encontrada' });
     }
 
-    // 🔐 Validar stock del producto vinculado
     let stockAnterior = 0;
     let nuevoStock = 0;
     if (vacuna.producto_id) {
@@ -177,13 +175,11 @@ exports.aplicarVacuna = async (req, res) => {
       }
       nuevoStock = stockAnterior - 1;
 
-      // Descontar stock
       await connection.query(
         'UPDATE productos SET stock_actual = ? WHERE id = ? AND organizacion_id = ?',
         [nuevoStock, vacuna.producto_id, organizacion_id]
       );
 
-      // Registrar movimiento de inventario
       await InventoryMovement.create({
         organizacion_id,
         producto_id: vacuna.producto_id,
@@ -199,7 +195,6 @@ exports.aplicarVacuna = async (req, res) => {
       }, connection);
     }
 
-    // Calcular fecha próxima si no viene
     let fechaProximaFinal = fecha_proxima;
     if (!fechaProximaFinal) {
       const fecha = new Date(fecha_aplicacion);
@@ -207,7 +202,6 @@ exports.aplicarVacuna = async (req, res) => {
       fechaProximaFinal = fecha.toISOString().split('T')[0];
     }
 
-    // Crear registro de historial
     const historialId = await HistorialVacuna.create({
       organizacion_id,
       paciente_id,
@@ -222,7 +216,6 @@ exports.aplicarVacuna = async (req, res) => {
 
     await connection.commit();
 
-    // Notificación WhatsApp (fuera de transacción)
     try {
       const [cliente] = await pool.query(
         'SELECT telefono_whatsapp, nombre FROM clientes WHERE id = ?',
@@ -259,6 +252,56 @@ exports.aplicarVacuna = async (req, res) => {
     await connection.rollback();
     console.error('Error al aplicar vacuna:', error);
     res.status(500).json({ message: 'Error al aplicar vacuna', error: error.message });
+  } finally {
+    connection.release();
+  }
+};
+
+// ========== EDITAR APLICACIÓN DE VACUNA ==========
+exports.editarAplicacionVacuna = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { id } = req.params;
+    const organizacion_id = req.organizacion_id;
+    const { fecha_aplicacion, fecha_proxima, lote, observaciones } = req.body;
+
+    const [historialReg] = await connection.query(
+      `SELECT h.*, f.estado AS factura_estado 
+       FROM historial_vacunas h
+       LEFT JOIN facturas f ON h.factura_id = f.id
+       WHERE h.id = ? AND h.organizacion_id = ?`,
+      [id, organizacion_id]
+    );
+
+    if (historialReg.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Registro de aplicación no encontrado' });
+    }
+
+    const reg = historialReg[0];
+
+    // Validación según regla de negocio (similar a consulta facturada)
+    if (reg.factura_id && reg.factura_estado === 'Pagada') {
+      await connection.rollback();
+      return res.status(400).json({
+        message: 'No se puede modificar esta aplicación porque la factura asociada ya está pagada.',
+      });
+    }
+
+    await connection.query(
+      `UPDATE historial_vacunas 
+       SET fecha_aplicacion = ?, fecha_proxima = ?, lote = ?, observaciones = ?
+       WHERE id = ? AND organizacion_id = ?`,
+      [fecha_aplicacion, fecha_proxima || null, lote || null, observaciones || null, id, organizacion_id]
+    );
+
+    await connection.commit();
+    res.json({ message: 'Aplicación de vacuna actualizada exitosamente' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error al editar aplicación de vacuna:', error);
+    res.status(500).json({ message: 'Error al editar aplicación de vacuna', error: error.message });
   } finally {
     connection.release();
   }
@@ -383,7 +426,7 @@ exports.exportarHistorial = async (req, res) => {
   }
 };
 
-// ========== GENERAR PDF CARTILLA ==========
+// ========== GENERAR PDF CARTILLA (CON LOGO ARRIBA A LA DERECHA) ==========
 async function generarPDFCartilla(data, res) {
   const { paciente, historial, organizacion } = data;
 
@@ -398,88 +441,107 @@ async function generarPDFCartilla(data, res) {
   });
 
   const primaryColor = '#1a1a2e';
+  const textColor = '#333333';
+  const lightGray = '#f5f5f5';
 
-  // Logo
+  // 1. CARGA DEL LOGO (RUTA ABSOLUTA CORRECTA HACIA backend/uploads)
   let alturaLogo = 40;
   if (organizacion.logo_url) {
-    const logoPath = path.join(__dirname, '../..', organizacion.logo_url);
+    // Extraemos únicamente el nombre del archivo (ej: org_1_1785722548676.jpg)
+    const nombreArchivo = path.basename(organizacion.logo_url);
+    
+    // process.cwd() apunta siempre a la carpeta raíz 'backend' donde corre el servidor
+    const logoPath = path.join(process.cwd(), 'uploads', 'logos', nombreArchivo);
+    
     if (fs.existsSync(logoPath)) {
       doc.image(logoPath, 40, 40, { fit: [120, 60] });
       alturaLogo = 105;
+    } else {
+      console.warn('⚠️ Logo no encontrado en la ruta física:', logoPath);
     }
   }
 
-  // Header
-  doc.font('Helvetica-Bold').fontSize(20).fillColor(primaryColor);
-  doc.text('CARTILLA DE VACUNACIÓN', 250, 40, { width: 305, align: 'right' });
-  doc.fontSize(10).fillColor('#666666');
-  doc.text(`Expediente: ${paciente.codigo_expediente || 'N/A'}`, 250, 65, { width: 305, align: 'right' });
-  doc.text(`Emitida: ${new Date().toLocaleDateString('es-SV')}`, 250, 80, { width: 305, align: 'right' });
+  // 2. ENCABEZADO A LA DERECHA
+  doc.font('Helvetica-Bold').fontSize(18).fillColor(primaryColor);
+  doc.text('CARTILLA DE VACUNACION', 300, 40, { width: 255, align: 'right' });
+  
+  doc.fontSize(9).fillColor('#666666');
+  doc.text(`Expediente: ${paciente.codigo_expediente || 'N/A'}`, 300, 65, { width: 255, align: 'right' });
+  doc.text(`Emitida: ${new Date().toLocaleDateString('es-SV')}`, 300, 80, { width: 255, align: 'right' });
 
-  // Emisor
+  // 3. DATOS DEL EMISOR
+  doc.moveDown(2);
   const emisorTop = Math.max(doc.y + 25, alturaLogo, 115);
   doc.y = emisorTop;
-  doc.font('Helvetica-Bold').fontSize(10).fillColor('#333');
-  doc.text('CLÍNICA VETERINARIA', 40, emisorTop);
-  doc.font('Helvetica').fontSize(9).fillColor('#555');
-  doc.text(organizacion.nombre_empresa || '-', 40, doc.y);
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(textColor);
+  doc.text('EMISOR', 40, emisorTop);
+  doc.font('Helvetica').fontSize(9).fillColor('#555555');
+  doc.text(organizacion.nombre_empresa || 'Clínica Veterinaria', 40, doc.y);
+  if (organizacion.nit) doc.text(`NIT: ${organizacion.nit}`, 40, doc.y);
+  if (organizacion.nrc) doc.text(`NRC: ${organizacion.nrc}`, 40, doc.y);
+  if (organizacion.direccion) doc.text(organizacion.direccion, 40, doc.y);
   if (organizacion.telefono) doc.text(`Tel: ${organizacion.telefono}`, 40, doc.y);
   if (organizacion.correo_contacto) doc.text(`Email: ${organizacion.correo_contacto}`, 40, doc.y);
+  const emisorBottom = doc.y + 5;
 
-  // Paciente
-  doc.font('Helvetica-Bold').fontSize(10).fillColor('#333');
+  // 4. DATOS DEL PACIENTE
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(textColor);
   doc.text('PACIENTE', 300, emisorTop);
-  doc.font('Helvetica').fontSize(9).fillColor('#555');
+  doc.font('Helvetica').fontSize(9).fillColor('#555555');
   doc.text(`${paciente.nombre || ''} ${paciente.apellidos || ''}`, 300, doc.y);
   if (paciente.especie) doc.text(`Especie: ${paciente.especie}`, 300, doc.y);
   if (paciente.raza) doc.text(`Raza: ${paciente.raza}`, 300, doc.y);
   if (paciente.fecha_nacimiento) {
     doc.text(`Nacimiento: ${new Date(paciente.fecha_nacimiento).toLocaleDateString('es-SV')}`, 300, doc.y);
   }
+  const clienteBottom = doc.y;
 
-  // Tabla
-  const tableTop = doc.y + 40;
-  doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff');
+  // 5. TABLA DE VACUNAS
+  const tableTop = Math.max(emisorBottom, clienteBottom) + 25;
+  const colX = [40, 110, 260, 330, 415, 480];
+
+  doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff');
   doc.rect(40, tableTop, 515, 20).fill(primaryColor);
-  doc.fillColor('#fff');
-  doc.text('FECHA', 45, tableTop + 6);
-  doc.text('VACUNA', 110, tableTop + 6);
-  doc.text('LOTE', 250, tableTop + 6);
-  doc.text('PRÓXIMA', 330, tableTop + 6);
-  doc.text('ESTADO', 420, tableTop + 6);
-  doc.text('VET.', 490, tableTop + 6);
+  doc.fillColor('#ffffff');
+  doc.text('FECHA', colX[0] + 5, tableTop + 6);
+  doc.text('VACUNA', colX[1] + 5, tableTop + 6);
+  doc.text('LOTE', colX[2], tableTop + 6);
+  doc.text('PROXIMA', colX[3], tableTop + 6);
+  doc.text('ESTADO', colX[4], tableTop + 6);
+  doc.text('VET.', colX[5], tableTop + 6);
 
   let rowY = tableTop + 25;
   historial.forEach((h, index) => {
-    if (index % 2 === 0) doc.rect(40, rowY - 3, 515, 18).fill('#f5f5f5');
-    doc.fillColor('#333').font('Helvetica').fontSize(8);
+    if (index % 2 === 0) doc.rect(40, rowY - 3, 515, 18).fill(lightGray);
+    doc.fillColor(textColor).font('Helvetica').fontSize(8.5);
 
     const estadoTexto =
-      h.semaforo === 'verde' ? '✓ Al día' :
-      h.semaforo === 'amarillo' ? '⚠ Próxima' :
-      h.semaforo === 'rojo' ? '✗ Vencida' : '—';
+      h.semaforo === 'verde' ? 'Al dia' :
+      h.semaforo === 'amarillo' ? 'Proxima' :
+      h.semaforo === 'rojo' ? 'Vencida' : '-';
 
-    doc.text(new Date(h.fecha_aplicacion).toLocaleDateString('es-SV'), 45, rowY);
-    doc.text(h.vacuna_nombre, 110, rowY, { width: 135, truncate: true });
-    doc.text(h.lote || '-', 250, rowY);
-    doc.text(h.fecha_proxima ? new Date(h.fecha_proxima).toLocaleDateString('es-SV') : '-', 330, rowY);
-    doc.text(estadoTexto, 420, rowY);
-    doc.text((h.medico_nombre || '-').substring(0, 12), 490, rowY, { width: 60, truncate: true });
+    doc.text(new Date(h.fecha_aplicacion).toLocaleDateString('es-SV'), colX[0] + 5, rowY);
+    doc.text(h.vacuna_nombre || '-', colX[1] + 5, rowY, { width: 140, truncate: true });
+    doc.text(h.lote || '-', colX[2], rowY, { width: 65, truncate: true });
+    doc.text(h.fecha_proxima ? new Date(h.fecha_proxima).toLocaleDateString('es-SV') : '-', colX[3], rowY);
+    doc.text(estadoTexto, colX[4], rowY);
+    doc.text((h.medico_nombre || '-').substring(0, 12), colX[5], rowY, { width: 75, truncate: true });
+    
     rowY += 20;
 
-    if (rowY > 700) {
+    if (rowY > 720) {
       doc.addPage();
       rowY = 50;
     }
   });
 
-  // Footer
-  const footerY = 780;
+  // 6. PIE DE PÁGINA
+  const footerY = 760;
   doc.moveTo(40, footerY).lineTo(555, footerY).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
   doc.fillColor('#9ca3af').fontSize(8);
   doc.text(
-    `Documento generado el ${new Date().toLocaleString('es-SV')} | Cartilla de vacunación`,
-    40, footerY + 8, { width: 515, align: 'center' }
+    `Generado: ${new Date().toLocaleDateString('es-SV')} | Cartilla de vacunacion`,
+    40, footerY + 10, { width: 515, align: 'center' }
   );
 
   doc.end();
@@ -496,7 +558,7 @@ exports.generarPDFCartillaPrivada = async (req, res) => {
     const historial = await HistorialVacuna.getCartillaPaciente(paciente_id, organizacion_id);
 
     const [org] = await pool.query(
-      `SELECT nombre_empresa, logo_url, telefono, correo_contacto FROM organizaciones WHERE id = ?`,
+      `SELECT nombre_empresa, nit, nrc, direccion, telefono, correo_contacto, logo_url FROM organizaciones WHERE id = ?`,
       [organizacion_id]
     );
 
@@ -507,7 +569,6 @@ exports.generarPDFCartillaPrivada = async (req, res) => {
   }
 };
 
-// ========== GENERAR TOKEN PÚBLICO (7 días) ==========
 exports.generarTokenCartilla = async (req, res) => {
   try {
     const { paciente_id } = req.params;
@@ -516,7 +577,6 @@ exports.generarTokenCartilla = async (req, res) => {
     const paciente = await Paciente.findById(paciente_id, organizacion_id);
     if (!paciente) return res.status(404).json({ message: 'Paciente no encontrado' });
 
-    // Token criptográficamente seguro (256 bits)
     const token = crypto.randomBytes(32).toString('hex');
 
     await pool.query(
@@ -542,12 +602,10 @@ exports.generarTokenCartilla = async (req, res) => {
   }
 };
 
-// ========== VER CARTILLA PÚBLICA (sin auth) ==========
 exports.getCartillaPublica = async (req, res) => {
   try {
     const { token } = req.params;
 
-    // Validar formato del token
     if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
       return res.status(400).json({ message: 'Link inválido' });
     }
@@ -557,7 +615,6 @@ exports.getCartillaPublica = async (req, res) => {
       return res.status(404).json({ message: 'Link inválido o expirado' });
     }
 
-    // Obtener historial con semáforo
     const historial = await HistorialVacuna.getCartillaPaciente(
       paciente.paciente_id,
       paciente.organizacion_id || null
@@ -638,9 +695,13 @@ exports.getPDFCartillaPublica = async (req, res) => {
 exports.listarHistorialGlobal = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
-    const { anio, mes, filtro } = req.query;
-    const historial = await HistorialVacuna.findAllGlobal(organizacion_id, anio, mes, filtro);
-    res.json(historial);
+    const { anio, mes, filtro, page = 1, limit = 10 } = req.query;
+    
+    const result = await HistorialVacuna.findAllGlobal(
+      organizacion_id, anio, mes, filtro, parseInt(page), parseInt(limit)
+    );
+    
+    res.json(result);
   } catch (error) {
     console.error('Error al listar historial global:', error);
     res.status(500).json({ message: 'Error al listar historial' });
@@ -654,7 +715,6 @@ exports.exportarTopVacunas = async (req, res) => {
     const anioFiltro = anio || new Date().getFullYear();
     const mesFiltro = mes ? parseInt(mes) : null;
 
-    // 1. Obtener el Top 5 de vacunas en el período
     let sqlTop = `
       SELECT v.id, v.nombre, COUNT(h.id) AS total_aplicaciones
       FROM historial_vacunas h
@@ -674,7 +734,6 @@ exports.exportarTopVacunas = async (req, res) => {
       return res.status(404).json({ message: 'No hay datos para el período seleccionado' });
     }
 
-    // 2. Obtener todas las aplicaciones de esas 5 vacunas (CORREGIDO IN)
     const idsVacunas = topVacunas.map(v => v.id);
     const placeholders = idsVacunas.map(() => '?').join(',');
 
@@ -707,7 +766,6 @@ exports.exportarTopVacunas = async (req, res) => {
       return res.status(404).json({ message: 'No se encontraron aplicaciones detalladas' });
     }
 
-    // 3. Mapeo para CSV
     const data = aplicaciones.map(a => ({
       'Vacuna': a.vacuna,
       'Fecha Aplicación': new Date(a.fecha_aplicacion).toLocaleDateString('es-SV'),

@@ -4,6 +4,7 @@ const Paciente = require('../../models/Paciente');
 const Medico = require('../../models/Medico');
 const Factura = require('../../models/Factura');
 const DetalleFactura = require('../../models/DetalleFactura');
+const HistorialPeso = require('../../models/HistorialPeso');
 const { pool } = require('../../config/db');
 
 exports.listar = async (req, res) => {
@@ -51,6 +52,16 @@ exports.crear = async (req, res) => {
     }
 
     const consultaId = await Consulta.create(data);
+    if (data.peso && Number(data.peso) > 0) {
+      await HistorialPeso.upsertDesdeConsulta({
+        organizacion_id,
+        paciente_id: data.paciente_id,
+        consulta_id: consultaId,
+        peso: Number(data.peso),
+        usuario_id: req.usuario_id,
+        fecha_registro: data.fecha_consulta,
+      });
+    }
     res.status(201).json({ message: 'Consulta creada', id: consultaId });
   } catch (error) {
     console.error('Error al crear consulta:', error);
@@ -78,6 +89,17 @@ exports.actualizar = async (req, res) => {
     }
 
     await Consulta.update(id, organizacion_id, data);
+    if (data.peso !== undefined) {
+      await HistorialPeso.upsertDesdeConsulta({
+        organizacion_id,
+        paciente_id: consulta.paciente_id,
+        consulta_id: Number(id),
+        peso: Number(data.peso),
+        usuario_id: req.usuario_id,
+        fecha_registro: data.fecha_consulta || consulta.fecha_consulta,
+      });
+    }
+
     res.json({ message: 'Consulta actualizada' });
   } catch (error) {
     console.error('Error al actualizar consulta:', error);

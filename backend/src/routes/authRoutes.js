@@ -20,7 +20,7 @@ router.post('/login', async (req, res) => {
 
     let organizacionData = null;
 
-    // Si no es SUPER_ADMIN, obtener datos de la organización (incluyendo tipo_organizacion y otros)
+    // Si no es SUPER_ADMIN, obtener datos de la organización
     if (user.rol !== 'SUPER_ADMIN' && user.organizacion_id) {
       const [orgRows] = await pool.query(
         `SELECT id, nombre_empresa, nombre_comercial, nit, nrc, 
@@ -28,6 +28,7 @@ router.post('/login', async (req, res) => {
                 tipo_contribuyente, ambiente, logo_url, estado,
                 tipo_organizacion, id_departamento, id_municipio, 
                 direccion_linea, codigo_giro, whatsapp_activado,
+                citas_activado, dte_activado, 
                 plan_id, limite_facturas, limite_whatsapp
          FROM organizaciones WHERE id = ?`,
         [user.organizacion_id]
@@ -58,6 +59,8 @@ router.post('/login', async (req, res) => {
         direccion_linea: org.direccion_linea,
         codigo_giro: org.codigo_giro,
         whatsapp_activado: org.whatsapp_activado,
+        citas_activado: org.citas_activado,
+        dte_activado: org.dte_activado,
         plan_id: org.plan_id,
         limite_facturas: org.limite_facturas,
         limite_whatsapp: org.limite_whatsapp,

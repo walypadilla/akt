@@ -1,3 +1,4 @@
+// backend/src/controllers/clinica/odontogramaController.js
 const { pool } = require('../../config/db');
 const Medico = require('../../models/Medico');
 
@@ -7,9 +8,12 @@ exports.obtener = async (req, res) => {
     const organizacion_id = req.organizacion_id;
 
     const [rows] = await pool.query(
-      `SELECT * FROM odontogramas
-       WHERE paciente_id = ? AND organizacion_id = ?
-       ORDER BY fecha_registro DESC`,
+      `SELECT o.*, u.nombre AS medico_nombre
+       FROM odontogramas o
+       LEFT JOIN medicos m ON o.medico_id = m.id
+       LEFT JOIN usuarios u ON m.usuario_id = u.id
+       WHERE o.paciente_id = ? AND o.organizacion_id = ?
+       ORDER BY o.fecha_registro DESC`,
       [paciente_id, organizacion_id]
     );
 
@@ -24,9 +28,10 @@ exports.guardar = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
     const { paciente_id, dientes, observaciones } = req.body;
+    const usuario_id = req.usuario_id; // CORREGIDO AQUÍ
 
     // Obtener médico asociado al usuario
-    const medico = await Medico.findByUsuarioId(req.user.id, organizacion_id);
+    const medico = await Medico.findByUsuarioId(usuario_id, organizacion_id);
     if (!medico) {
       return res.status(400).json({ message: 'El usuario no está registrado como médico' });
     }

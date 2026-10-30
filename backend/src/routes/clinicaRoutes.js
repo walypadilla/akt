@@ -7,6 +7,7 @@ const odontogramaController = require('../controllers/clinica/odontogramaControl
 const examenController = require('../controllers/clinica/examenController');
 const medicoController = require('../controllers/clinica/medicoController');
 const vacunaController = require('../controllers/clinica/vacunaController');
+const historialPesoController = require('../controllers/clinica/historialPesoController')
 const { uploadExamen } = require('../middleware/uploadExamenes');
 
 const router = express.Router();
@@ -46,6 +47,7 @@ router.post('/citas', citaController.crear);
 router.get('/citas/:id', citaController.obtener);
 router.put('/citas/:id', citaController.actualizar);
 router.put('/citas/:id/estado', citaController.cambiarEstado);
+router.post('/citas/:id/whatsapp', citaController.enviarWhatsApp);
 
 // ========== CONSULTAS ==========
 router.get('/consultas/anios', consultaController.getAniosDisponibles);
@@ -116,6 +118,17 @@ router.get('/vacunas/historial/:paciente_id', vacunaController.listarHistorialPo
 router.get('/vacunas/cartilla/:paciente_id', vacunaController.getCartilla);
 router.get('/vacunas/cartilla/:paciente_id/pdf', vacunaController.generarPDFCartillaPrivada);
 router.post('/vacunas/aplicar', vacunaController.aplicarVacuna);
+router.put('/vacunas/aplicar/:id', vacunaController.editarAplicacionVacuna);
 router.post('/vacunas/cartilla/:paciente_id/token', vacunaController.generarTokenCartilla);
+
+// ========== HISTORIAL PESOO ================================00
+router.get('/pesos/kpis',                    historialPesoController.kpis);
+router.get('/pesos/pacientes',               historialPesoController.listarPacientes);
+router.get('/pesos/exportar/filtrados',      historialPesoController.exportarFiltrados);
+router.get('/pesos/paciente/:id',            historialPesoController.historialPaciente);
+router.get('/pesos/paciente/:id/exportar',   historialPesoController.exportarHistorialPaciente);
+router.put('/pesos/paciente/:id/ideal',      historialPesoController.actualizarPesoIdeal);
+router.post('/pesos/registro-rapido',        historialPesoController.registroRapido);
+router.delete('/pesos/:id',                  historialPesoController.eliminar);
 
 module.exports = router;

@@ -4,8 +4,18 @@ const Cliente = require('../../models/Cliente');
 exports.listar = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
-    const { search, tipo_paciente } = req.query;
-    const pacientes = await Paciente.findAll(organizacion_id, { search, tipo_paciente });
+    
+    // 1. Extraemos TODAS las variables, incluyendo la paginación y los nuevos filtros
+    const { search, tipo_paciente, activo, dui, sexo, page, limit } = req.query;
+    
+    // 2. Pasamos los filtros completos al modelo (Paciente.findAll)
+    const pacientes = await Paciente.findAll(
+      organizacion_id, 
+      { search, tipo_paciente, activo, dui, sexo },
+      page || 1,
+      limit || 10
+    );
+    
     res.json(pacientes);
   } catch (error) {
     console.error('Error al listar pacientes:', error);

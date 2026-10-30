@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Clipboard, Search, Plus, Edit2, Eye, X, Download, Filter,
-  Printer, FileText, CheckCircle, Clock, DollarSign, Calendar, Hash, User, Activity, AlertCircle
+  Printer, FileText, CheckCircle, Clock, DollarSign, Calendar, Hash, User, Activity, AlertCircle,
+  TrendingUp, TrendingDown, Users
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import {
@@ -54,6 +55,14 @@ const Consultas = () => {
   const tableRef = useRef(null);
   const [showFilters, setShowFilters] = useState(false);
 
+  // Estados de KPIs
+  const [kpis, setKpis] = useState({
+    totalConsultas: 0,
+    variacionConsultas: 0,
+    totalFacturado: 0,
+    pacientesAtendidos: 0,
+  });
+
   // Filtros con año/mes (por defecto mes actual)
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mes, setMes] = useState(hoy.getMonth() + 1);
@@ -88,22 +97,66 @@ const Consultas = () => {
       const params = {
         anio,
         mes,
+        limit: 9999, // Asegurar traer todas las consultas del mes para el KPI
       };
       if (busqueda) params.search = busqueda;
       if (filtros.paciente_id) params.paciente_id = filtros.paciente_id;
       if (filtros.medico_id) params.medico_id = filtros.medico_id;
 
-      const [consultasData, pacientesData, medicosData, productosData] = await Promise.all([
+      // Calcular mes anterior para la variación
+      let prevMes = mes - 1;
+      let prevAnio = anio;
+      if (prevMes === 0) {
+        prevMes = 12;
+        prevAnio = anio - 1;
+      }
+      const prevParams = { anio: prevAnio, mes: prevMes, limit: 9999 };
+
+      // Ejecutar peticiones en paralelo
+      const [consultasData, pacientesData, medicosData, productosData, prevConsultasData] = await Promise.all([
         getConsultas(params),
         getPacientes({ limit: 99999 }),
         getMedicos(),
         getProductos({ limit: 99999 }),
+        getConsultas(prevParams).catch(() => []), // Si falla, no rompe el flujo
       ]);
 
-      setConsultas(Array.isArray(consultasData) ? consultasData : consultasData.consultas || []);
+      const consultasArr = Array.isArray(consultasData) ? consultasData : consultasData.consultas || [];
+      const prevConsultasArr = Array.isArray(prevConsultasData) ? prevConsultasData : prevConsultasData.consultas || [];
+
+      setConsultas(consultasArr);
       setPacientes(pacientesData.pacientes || pacientesData || []);
       setMedicos(medicosData || []);
       setProductos(productosData.productos || productosData || []);
+
+      // --- CÁLCULO DE KPIs ---
+      const totalActual = consultasArr.length;
+      const totalPrev = prevConsultasArr.length;
+
+      // Variación consultas
+      let variacion = 0;
+      if (totalPrev > 0) {
+        variacion = ((totalActual - totalPrev) / totalPrev) * 100;
+      } else if (totalActual > 0) {
+        variacion = 100; // Crecimiento desde 0
+      }
+
+      // Total Facturado (Solo consultas no anuladas)
+      const facturado = consultasArr.reduce((acc, c) => {
+        const total = (c.factura_estado !== 'Anulada' && c.factura_total) ? parseFloat(c.factura_total) : 0;
+        return acc + total;
+      }, 0);
+
+      // Pacientes únicos atendidos
+      const pacientesUnicos = new Set(consultasArr.map(c => c.paciente_id)).size;
+
+      setKpis({
+        totalConsultas: totalActual,
+        variacionConsultas: variacion,
+        totalFacturado: facturado,
+        pacientesAtendidos: pacientesUnicos,
+      });
+
     } catch (err) {
       console.error('Error loading consultas:', err);
       setError(err.message || 'Error al cargar consultas');
@@ -111,7 +164,7 @@ const Consultas = () => {
     } finally {
       setLoading(false);
     }
-  }, [anio, mes, busqueda, filtros.paciente_id, filtros.medico_id]);
+  }, [anio, mes, busqueda, filtros.paciente_id, filtros.medico_id, setLoading, setError]);
 
   useEffect(() => {
     loadData();
@@ -176,7 +229,6 @@ const Consultas = () => {
 
   const handleFacturar = async (consultaId) => {
     try {
-      // Cargar consulta, exámenes y vacunas en paralelo
       const [consulta, examenesInternos, vacunasAplicadas] = await Promise.all([
         getConsulta(consultaId),
         getExamenesInternosConsulta(consultaId).catch(() => []),
@@ -185,7 +237,6 @@ const Consultas = () => {
 
       setSelectedConsulta(consulta);
 
-      // Servicios sugeridos por exámenes internos
       const serviciosExamenes = (examenesInternos || []).map((ex) => ({
         producto_id: ex.producto_id,
         cantidad: 1,
@@ -195,7 +246,6 @@ const Consultas = () => {
         _examenNombre: ex.examen_nombre,
       }));
 
-      // Servicios sugeridos por vacunas aplicadas
       const serviciosVacunas = (vacunasAplicadas || []).map((v) => ({
         producto_id: v.producto_id,
         cantidad: 1,
@@ -232,7 +282,6 @@ const Consultas = () => {
         return;
       }
 
-      // Calcular total local para comparación
       const totalCalculado = serviciosValidos.reduce((acc, s) => {
         const sub = parseFloat(s.cantidad || 0) * parseFloat(s.precio_unitario || 0);
         return acc + sub + (s.tipo_venta === 'Gravado' ? sub * 0.13 : 0);
@@ -244,12 +293,6 @@ const Consultas = () => {
         estado: facturaData.estado,
         condicion_operacion: facturaData.condicion_operacion,
       });
-
-      if (Math.abs(result.total - totalCalculado) > 0.01) {
-        console.warn(
-          `Diferencia de total: mostrado $${totalCalculado.toFixed(2)} vs backend $${result.total.toFixed(2)}`
-        );
-      }
 
       toast.success(`Factura generada: ${result.numero_correlativo} - $${result.total.toFixed(2)}`);
       setShowFacturar(false);
@@ -381,6 +424,8 @@ const Consultas = () => {
     return <ErrorMessage message={error} onRetry={loadData} />;
   }
 
+  const isPositivo = kpis.variacionConsultas >= 0;
+
   return (
     <div className="p-6 space-y-6">
       {/* HEADER */}
@@ -440,6 +485,56 @@ const Consultas = () => {
         <span className="text-xs text-gray-500 ml-auto italic">
           Mostrando: {MESES[mes - 1]} {anio}
         </span>
+      </div>
+
+      {/* ============ KPI CARDS ============ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: Total Consultas */}
+        <div className="bg-gray-800/90 rounded-xl border border-gray-700/80 p-4 shadow-lg flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Consultas Mes</p>
+            <p className="text-2xl font-bold text-white">{kpis.totalConsultas}</p>
+          </div>
+          <div className="p-3 bg-purple-500/20 rounded-lg text-purple-400">
+            <Clipboard size={22} />
+          </div>
+        </div>
+
+        {/* KPI 2: Variación */}
+        <div className="bg-gray-800/90 rounded-xl border border-gray-700/80 p-4 shadow-lg flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Variación vs Mes Ant.</p>
+            <div className={`flex items-center gap-1 text-2xl font-bold ${isPositivo ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {isPositivo ? '+' : ''}{kpis.variacionConsultas.toFixed(1)}%
+              {isPositivo ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
+            </div>
+          </div>
+          <div className={`p-3 rounded-lg ${isPositivo ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+             {isPositivo ? <TrendingUp size={22} /> : <TrendingDown size={22} />}
+          </div>
+        </div>
+
+        {/* KPI 3: Pacientes Atendidos */}
+        <div className="bg-gray-800/90 rounded-xl border border-gray-700/80 p-4 shadow-lg flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Pacientes Atendidos</p>
+            <p className="text-2xl font-bold text-cyan-400">{kpis.pacientesAtendidos}</p>
+          </div>
+          <div className="p-3 bg-cyan-500/20 rounded-lg text-cyan-400">
+            <Users size={22} />
+          </div>
+        </div>
+
+        {/* KPI 4: Total Facturado */}
+        <div className="bg-gray-800/90 rounded-xl border border-gray-700/80 p-4 shadow-lg flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Total Facturado</p>
+            <p className="text-2xl font-bold text-emerald-400">${kpis.totalFacturado.toFixed(2)}</p>
+          </div>
+          <div className="p-3 bg-emerald-500/20 rounded-lg text-emerald-400">
+            <DollarSign size={22} />
+          </div>
+        </div>
       </div>
 
       {/* FILTROS AVANZADOS */}
@@ -525,20 +620,20 @@ const Consultas = () => {
           </span>
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto">
+        <div ref={tableRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">
                   <Hash size={11} className="inline mr-1" />SKU
                 </th>
-                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha</th>
-                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Paciente</th>
-                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Médico</th>
-                <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Diagnóstico</th>
-                <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Receta</th>
-                <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Factura</th>
-                <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Fecha</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Paciente</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Médico</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Diagnóstico</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Receta</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Factura</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -552,87 +647,105 @@ const Consultas = () => {
                   </td>
                 </tr>
               ) : (
-                consultas.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-3 py-2 text-purple-300 font-mono text-xs whitespace-nowrap">
-                      {c.codigo_sku || '-'}
-                    </td>
-                    <td className="px-3 py-2 text-gray-300 whitespace-nowrap">
-                      {new Date(c.fecha_consulta).toLocaleString('es-SV')}
-                    </td>
-                    <td className="px-3 py-2 text-white font-semibold whitespace-nowrap">
-                      {c.paciente_nombre || 'N/A'} {c.paciente_apellidos || ''}
-                    </td>
-                    <td className="px-3 py-2 text-gray-300 whitespace-nowrap">{c.medico_nombre || 'N/A'}</td>
-                    <td className="px-3 py-2 text-gray-300 max-w-[180px] truncate">
-                      {c.diagnostico_texto || '-'}
-                      {c.diagnostico_codigo && (
-                        <span className="text-xs text-gray-500 ml-1">({c.diagnostico_codigo})</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      {c.receta ? (
-                        <button
-                          onClick={() => handleImprimirReceta(c)}
-                          className="text-cyan-400 hover:text-cyan-300"
-                          title="Imprimir receta"
-                        >
-                          <Printer size={16} />
-                        </button>
-                      ) : (
-                        <span className="text-gray-500 text-xs">-</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center whitespace-nowrap">
-                      {(() => {
-                        const tieneFacturaActiva = c.factura_id && c.factura_estado !== 'Anulada';
-                        if (!tieneFacturaActiva) {
-                          return (
-                            <button
-                              onClick={() => handleFacturar(c.id)}
-                              title="Facturar consulta"
-                              className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
-                            >
-                              <DollarSign size={12} />
-                            </button>
-                          );
-                        }
-                        const colores = {
-                          Pagada: 'bg-green-500/20 text-green-300 border-green-500/40',
-                          Emitida: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40',
-                          Borrador: 'bg-gray-500/20 text-gray-300 border-gray-500/40',
-                        };
-                        const colorClase = colores[c.factura_estado] || colores['Emitida'];
-                        return (
-                          <span
-                            title={`Factura ${c.factura_numero || c.factura_id} - ${c.factura_estado}`}
-                            className={`px-2 py-1 border rounded text-xs font-bold flex items-center gap-1 justify-center ${colorClase}`}
+                consultas.map((c) => {
+                  // CONSTRUCCIÓN DEL TOOLTIP/DESCRIPCIÓN COMPLETA
+                  const descripcionCompleta = [
+                    c.diagnostico_texto,
+                    c.diagnostico_codigo ? `(${c.diagnostico_codigo})` : '',
+                    (c.sintomas || c.sintomatologia) ? `\nSíntomas: ${c.sintomas || c.sintomatologia}` : '',
+                    c.subjetivo ? `\nSubjetivo: ${c.subjetivo}` : ''
+                  ].filter(Boolean).join(' ');
+
+                  return (
+                    <tr key={c.id} className="hover:bg-gray-700/30 transition-colors">
+                      <td className="px-2 py-1 text-purple-300 font-mono text-xs whitespace-nowrap">
+                        {c.codigo_sku || '-'}
+                      </td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
+                        {new Date(c.fecha_consulta).toLocaleString('es-SV')}
+                      </td>
+                      <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">
+                        {c.paciente_nombre || 'N/A'} {c.paciente_apellidos || ''}
+                      </td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{c.medico_nombre || 'N/A'}</td>
+                      
+                      {/* CELDA CON TOOLTIP INTEGRADO PARA MOSTRAR LA DESCRIPCIÓN COMPLETA */}
+                      <td 
+                        className="px-2 py-1 text-gray-300 max-w-[220px] truncate cursor-help"
+                        title={descripcionCompleta || 'Sin diagnóstico detallado'}
+                      >
+                        <span className="font-medium text-white">{c.diagnostico_texto || '-'}</span>
+                        {c.diagnostico_codigo && (
+                          <span className="text-xs text-gray-400 ml-1">({c.diagnostico_codigo})</span>
+                        )}
+                      </td>
+
+                      <td className="px-2 py-1 text-center">
+                        {c.receta ? (
+                          <button
+                            onClick={() => handleImprimirReceta(c)}
+                            className="text-cyan-400 hover:text-cyan-300"
+                            title="Imprimir receta"
                           >
-                            <CheckCircle size={12} /> {c.factura_estado}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => handleVerDetalle(c.id)}
-                          title="Ver detalle"
-                          className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold transition"
-                        >
-                          <Eye size={12} />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(c)}
-                          title="Editar"
-                          className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold transition"
-                        >
-                          <Edit2 size={12} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                            <Printer size={14} />
+                          </button>
+                        ) : (
+                          <span className="text-gray-500 text-xs">-</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center">
+                          {(() => {
+                            const tieneFacturaActiva = c.factura_id && c.factura_estado !== 'Anulada';
+                            if (!tieneFacturaActiva) {
+                              return (
+                                <button
+                                  onClick={() => handleFacturar(c.id)}
+                                  title="Facturar consulta"
+                                  className="w-24 inline-flex items-center justify-center gap-1.5 px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/40 rounded-lg text-xs font-medium transition-colors"
+                                >
+                                  <DollarSign size={14} /> <span>Facturar</span>
+                                </button>
+                              );
+                            }
+                            const colores = {
+                              Pagada: 'bg-green-500/10 text-green-400 border-green-500/40',
+                              Emitida: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/40',
+                              Borrador: 'bg-gray-500/10 text-gray-400 border-gray-500/40',
+                            };
+                            const colorClase = colores[c.factura_estado] || colores['Emitida'];
+                            return (
+                              <span
+                                title={`Factura ${c.factura_numero || c.factura_id} - ${c.factura_estado}`}
+                                className={`w-24 inline-flex items-center justify-center gap-1.5 px-2 py-1 border rounded-lg text-xs font-medium ${colorClase}`}
+                              >
+                                <CheckCircle size={14} /> {c.factura_estado}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </td>
+                      <td className="px-2 py-1 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleVerDetalle(c.id)}
+                            title="Ver detalle"
+                            className="inline-flex items-center gap-1.5 px-2 py-1 bg-transparent hover:bg-cyan-500/10 text-cyan-400 border border-cyan-500/50 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            <Eye size={14} /> <span>Detalle</span>
+                          </button>
+                          <button
+                            onClick={() => handleEdit(c)}
+                            title="Editar"
+                            className="inline-flex items-center gap-1.5 px-2 py-1 bg-transparent hover:bg-yellow-500/10 text-yellow-400 border border-yellow-500/50 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            <Edit2 size={14} /> <span>Editar</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

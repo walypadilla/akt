@@ -119,15 +119,10 @@ const Pacientes = () => {
     }
   }, [filtros]);
 
+  // Carga inicial y actualización al cambiar los filtros definitivos
   useEffect(() => {
     loadData();
-  }, [
-    filtros.page,
-    filtros.search,
-    filtros.dui,
-    filtros.sexo,
-    filtros.activo,
-  ]);
+  }, [loadData]);
 
   useLayoutEffect(() => {
     if (!loading && tableRef.current && scrollPosition > 0) {
@@ -363,24 +358,19 @@ const Pacientes = () => {
 
         {showFilters && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3 p-3 border-t border-gray-700/70">
+            {/* Input Unificado de Búsqueda */}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
               <input
                 type="text"
-                placeholder="Nombre del paciente..."
+                placeholder="Buscar por paciente, dueño o DUI..."
                 value={filtrosTemp.search}
                 onChange={(e) => setFiltrosTemp({ ...filtrosTemp, search: e.target.value })}
                 onKeyDown={handleSearchKeyDown}
                 className="pl-8 pr-7 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs w-full focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
-            <input
-              type="text"
-              placeholder="DUI (ej: 00000000-0)"
-              value={filtrosTemp.dui}
-              onChange={(e) => setFiltrosTemp({ ...filtrosTemp, dui: e.target.value })}
-              className="px-3 py-1.5 bg-gray-900/80 border border-gray-600 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
+            
             <select
               value={filtrosTemp.sexo}
               onChange={(e) => setFiltrosTemp({ ...filtrosTemp, sexo: e.target.value })}
@@ -430,30 +420,30 @@ const Pacientes = () => {
           </span>
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div ref={tableRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
                 {isVeterinaria ? (
                   // Columnas para Veterinaria
                   <>
-                    <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Edad</th>
-                    <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Dueño</th>
-                    <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Especie / Raza</th>
-                    <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Color</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Edad</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Dueño</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Especie / Raza</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Color</th>
                   </>
                 ) : (
                   // Columnas para Clínica General y Dental
                   <>
-                    <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Edad</th>
-                    <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Cliente</th>
-                    <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Sexo</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Edad</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Cliente</th>
+                    <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Sexo</th>
                   </>
                 )}
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Peso</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Peso</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -470,36 +460,36 @@ const Pacientes = () => {
                   return (
                     <tr key={p.id} className="hover:bg-gray-700/30 transition-colors">
                       {/* Nombre siempre presente */}
-                      <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">
+                      <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">
                         {p.nombre} {p.apellidos || ''}
                       </td>
 
                       {isVeterinaria ? (
                         // === VETERINARIA ===
                         <>
-                          <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{edad !== '-' ? `${edad} años` : '-'}</td>
-                          <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.cliente_nombre || 'Sin asignar'}</td>
-                          <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
+                          <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{edad !== '-' ? `${edad} años` : '-'}</td>
+                          <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.cliente_nombre || 'Sin asignar'}</td>
+                          <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
                             {p.especie || '-'} {p.raza ? `(${p.raza})` : ''}
                           </td>
-                          <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.color || '-'}</td>
+                          <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.color || '-'}</td>
                         </>
                       ) : (
                         // === CLÍNICA GENERAL Y DENTAL ===
                         <>
-                          <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{edad !== '-' ? `${edad} años` : '-'}</td>
-                          <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.cliente_nombre || 'Sin asignar'}</td>
-                          <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">
+                          <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{edad !== '-' ? `${edad} años` : '-'}</td>
+                          <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.cliente_nombre || 'Sin asignar'}</td>
+                          <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
                             {p.genero === 'M' ? 'Masculino' : p.genero === 'F' ? 'Femenino' : 'Otro'}
                           </td>
                         </>
                       )}
 
                       {/* Peso (común para todos) */}
-                      <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{p.peso ? `${p.peso} kg` : '-'}</td>
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{p.peso ? `${p.peso} kg` : '-'}</td>
 
                       {/* Estado (común) */}
-                      <td className="px-2 py-1.5 whitespace-nowrap">
+                      <td className="px-2 py-1 whitespace-nowrap">
                         {p.activo === 1 ? (
                           <span className="text-emerald-400 font-semibold">Activo</span>
                         ) : (
@@ -509,38 +499,39 @@ const Pacientes = () => {
 
                       {/* Acciones (común) */}
                       <td className="px-2 py-1.5 whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => abrirExpediente(p.id)}
                             title="Ver Expediente"
-                            className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                            className="inline-flex items-center gap-1.5 px-2 py-1 bg-transparent hover:bg-cyan-500/10 text-cyan-400 border border-cyan-500/50 rounded-lg text-xs font-medium transition-colors"
                           >
-                            <Eye size={12} />
+                            <Eye size={12} /> <span>Expediente</span>
                           </button>
+                          
                           {p.activo === 1 ? (
                             <>
                               <button
                                 onClick={() => handleEdit(p)}
                                 title="Editar paciente"
-                                className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                                className="inline-flex items-center gap-1.5 px-2 py-1 bg-transparent hover:bg-yellow-500/10 text-yellow-400 border border-yellow-500/50 rounded-lg text-xs font-medium transition-colors"
                               >
-                                <Edit2 size={12} />
+                                <Edit2 size={12} /> <span>Editar</span>
                               </button>
                               <button
                                 onClick={() => handleDelete(p.id, p.nombre)}
                                 title="Desactivar paciente"
-                                className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                                className="inline-flex items-center gap-1.5 px-2 py-1 bg-transparent hover:bg-rose-500/10 text-rose-400 border border-rose-500/50 rounded-lg text-xs font-medium transition-colors"
                               >
-                                <Trash2 size={12} />
+                                <Trash2 size={12} /> <span>Desactivar</span>
                               </button>
                             </>
                           ) : (
                             <button
                               onClick={() => handleReactivar(p.id, p.nombre)}
                               title="Reactivar paciente"
-                              className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-transparent hover:bg-emerald-500/10 text-emerald-400 border border-emerald-500/50 rounded-lg text-xs font-medium transition-colors"
                             >
-                              <RotateCcw size={12} />
+                              <RotateCcw size={12} /> <span>Reactivar</span>
                             </button>
                           )}
                         </div>

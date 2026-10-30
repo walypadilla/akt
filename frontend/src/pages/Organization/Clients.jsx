@@ -36,6 +36,7 @@ import {
   UserX,
   FileText,
   Calendar,
+  Printer
 } from 'lucide-react';
 import {
   LineChart,
@@ -373,13 +374,16 @@ const Clients = () => {
   const handleGenerarPDF = async (id) => {
     try {
       const blob = await generarClientePDF(id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cliente_${id}.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
+      // Forzamos el tipo application/pdf para que el navegador lo abra nativamente
+      const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(pdfBlob);
+      
+      // Abrir en una nueva pestaña
+      window.open(url, '_blank');
       toast.success('PDF generado');
+      
+      // Limpiamos la URL después de un tiempo prudencial para evitar fugas de memoria
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
     } catch (err) {
       toast.error(err.message || 'Error al generar PDF');
     }
@@ -657,19 +661,19 @@ const Clients = () => {
           </span>
         </div>
 
-        <div ref={tableRef} className="overflow-x-auto" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div ref={tableRef} className="overflow-x-auto min-h-[380px] pb-4 rounded-b-xl" style={{ maxHeight: '550px', overflowY: 'auto' }}>
           <table className="min-w-full divide-y divide-gray-700/80 text-xs">
             <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
               <tr>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Documento</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">NRC</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Giro</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Contribuyente</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Teléfono</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Email</th>
-                <th className="px-2 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                <th className="px-2 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Documento</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">NRC</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Giro</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Contribuyente</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Teléfono</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Email</th>
+                <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -683,30 +687,30 @@ const Clients = () => {
               ) : (
                 clientes.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-2 py-1.5 text-white font-semibold whitespace-nowrap">{c.nombre}</td>
-                    <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">
+                    <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">{c.nombre}</td>
+                    <td className="px-2 py-1 text-gray-300 font-mono whitespace-nowrap">
                       {c.nit ? `NIT: ${c.nit}` : c.dui ? `DUI: ${c.dui}` : '-'}
                     </td>
-                    <td className="px-2 py-1.5 text-gray-300 font-mono whitespace-nowrap">{c.nrc || '-'}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{c.giro || '-'}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{c.tipo_contribuyente}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{c.telefono || '-'}</td>
-                    <td className="px-2 py-1.5 text-gray-300 whitespace-nowrap">{c.correo || '-'}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
+                    <td className="px-2 py-1 text-gray-300 font-mono whitespace-nowrap">{c.nrc || '-'}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{c.giro || '-'}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{c.tipo_contribuyente}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{c.telefono || '-'}</td>
+                    <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{c.correo || '-'}</td>
+                    <td className="px-2 py-1 whitespace-nowrap">
                       {c.activo === 1 ? (
                         <span className="text-emerald-400 font-semibold">Activo</span>
                       ) : (
                         <span className="text-rose-400 font-semibold">Inactivo</span>
                       )}
                     </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">
+                    <td className="px-2 py-1 whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => handleGenerarPDF(c.id)}
-                          title="Generar PDF"
+                          title="Imprimir PDF"
                           className="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-white border border-cyan-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
                         >
-                          <FileText size={12} />
+                          <Printer size={12} /> Imprimir
                         </button>
                         {c.activo === 1 ? (
                           <>
@@ -715,14 +719,14 @@ const Clients = () => {
                               title="Editar cliente"
                               className="px-2 py-1 bg-yellow-500/10 hover:bg-yellow-500 text-yellow-400 hover:text-white border border-yellow-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
                             >
-                              <Edit3 size={12} />
+                              <Edit3 size={12} /> Editar
                             </button>
                             <button
                               onClick={() => handleDelete(c.id, c.nombre)}
                               title="Desactivar cliente"
                               className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
                             >
-                              <Trash2 size={12} />
+                              <Trash2 size={12} /> Desactivar
                             </button>
                           </>
                         ) : (
@@ -731,7 +735,7 @@ const Clients = () => {
                             title="Reactivar cliente"
                             className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition"
                           >
-                            <RotateCcw size={12} />
+                            <RotateCcw size={12} /> Reactivar
                           </button>
                         )}
                       </div>

@@ -1,7 +1,8 @@
 // frontend/src/components/forms/OrganizationForm.jsx
 import React, { useState, useEffect } from 'react';
 import { getDepartamentos, getMunicipios } from '../../api/catalogos';
-import { getPlanes } from '../../api/dashboard'; // Crear esta API si no existe
+import { getPlanes } from '../../api/dashboard';
+import { CheckCircle, XCircle, MapPin, User } from 'lucide-react';
 
 const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => {
   const [formData, setFormData] = useState({
@@ -29,6 +30,12 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
     plan_id: initialData.plan_id || 1,
     whatsapp_activado: initialData.whatsapp_activado !== undefined 
       ? Boolean(Number(initialData.whatsapp_activado) || initialData.whatsapp_activado === true || initialData.whatsapp_activado === 'true')
+      : true,
+    citas_activado: initialData.citas_activado !== undefined 
+      ? Boolean(Number(initialData.citas_activado) || initialData.citas_activado === true || initialData.citas_activado === 'true')
+      : false,
+    dte_activado: initialData.dte_activado !== undefined 
+      ? Boolean(Number(initialData.dte_activado) || initialData.dte_activado === true || initialData.dte_activado === 'true')
       : true,
   });
 
@@ -95,9 +102,6 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
   useEffect(() => {
     const loadPlanes = async () => {
       try {
-        // Si tienes API para planes, usarla; si no, usar datos locales
-        // const data = await getPlanes();
-        // setPlanes(data);
         setPlanes(planesData);
       } catch (error) {
         console.error('Error cargando planes:', error);
@@ -157,14 +161,20 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
     e.preventDefault();
     if (validate()) {
       const isWhatsappActivo = Boolean(formData.whatsapp_activado);
+      const isDteActivo = Boolean(formData.dte_activado);
+      
       const dataToSubmit = {
         ...formData,
         telefono: formData.telefono ? `+503${formData.telefono}` : '',
         telefono_whatsapp: formData.telefono_whatsapp ? `+503${formData.telefono_whatsapp}` : '',
         whatsapp_activado: isWhatsappActivo ? 1 : 0,
-        limite_facturas: parseInt(limites.facturas, 10) || 0,
+        citas_activado: formData.citas_activado ? 1 : 0,
+        dte_activado: isDteActivo ? 1 : 0,
+        // Si el modulo esta inactivo, forzamos el limite a 0
+        limite_facturas: isDteActivo ? (parseInt(limites.facturas, 10) || 0) : 0,
         limite_whatsapp: isWhatsappActivo ? (parseInt(limites.whatsapp, 10) || 0) : 0,
       };
+      
       // Si hay archivo, enviar con FormData
       if (formData.logo_file) {
         const formDataObj = new FormData();
@@ -174,7 +184,7 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
           }
         });
         formDataObj.append('logo', formData.logo_file);
-        onSubmit(formDataObj); // El onSubmit debe manejar FormData
+        onSubmit(formDataObj);
       } else {
         onSubmit(dataToSubmit);
       }
@@ -327,6 +337,7 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
             name="ambiente"
             value={formData.ambiente}
             onChange={handleChange}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
           >
             <option value="00">Pruebas</option>
             <option value="01">Producción</option>
@@ -366,10 +377,7 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
             onChange={(e) => {
               const file = e.target.files[0];
               if (file) {
-                // 1. Guardamos el archivo REAL inmediatamente en el estado
                 setFormData(prev => ({ ...prev, logo_file: file }));
-
-                // 2. Después generamos la vista previa
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                   setFormData(prev => ({ ...prev, logo_preview: ev.target.result }));
@@ -402,6 +410,27 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
           </select>
         </div>
 
+        {/* DTE Activado */}
+        <div className="flex items-center gap-3 bg-gray-700/50 p-3 rounded-lg border border-gray-600">
+          <label className="text-sm font-medium text-gray-300">Facturación Electrónica (DTE)</label>
+          <input
+            type="checkbox"
+            name="dte_activado"
+            checked={formData.dte_activado}
+            onChange={handleChange}
+            className="w-5 h-5 bg-gray-700 border-gray-600 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+          />
+          {formData.dte_activado ? (
+            <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium">
+              <CheckCircle size={14} /> Activado
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs text-rose-400 font-medium">
+              <XCircle size={14} /> Desactivado
+            </span>
+          )}
+        </div>
+
         {/* Límite facturas */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -413,10 +442,14 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
           <input
             type="number"
             min="0"
-            value={limites.facturas}
+            value={formData.dte_activado ? limites.facturas : 0}
             onChange={(e) => setLimites({ ...limites, facturas: parseInt(e.target.value) || 0 })}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            disabled={!formData.dte_activado}
+            className={`w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition ${!formData.dte_activado ? 'opacity-50 cursor-not-allowed' : ''}`}
           />
+          {!formData.dte_activado && (
+            <p className="text-xs text-rose-400 mt-1">DTE desactivado, el límite se guardará en 0</p>
+          )}
         </div>
 
         {/* WhatsApp Activado */}
@@ -429,9 +462,15 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
             onChange={handleChange}
             className="w-5 h-5 bg-gray-700 border-gray-600 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
           />
-          <span className="text-xs text-gray-400">
-            {formData.whatsapp_activado ? '✅ Activado' : '❌ Desactivado'}
-          </span>
+          {formData.whatsapp_activado ? (
+            <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium">
+              <CheckCircle size={14} /> Activado
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs text-rose-400 font-medium">
+              <XCircle size={14} /> Desactivado
+            </span>
+          )}
         </div>
 
         {/* Límite WhatsApp */}
@@ -456,11 +495,32 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
           )}
         </div>
 
+        {/* Módulo de Citas Activado */}
+        <div className="flex items-center gap-3 bg-gray-700/50 p-3 rounded-lg border border-gray-600">
+          <label className="text-sm font-medium text-gray-300">Módulo de Citas</label>
+          <input
+            type="checkbox"
+            name="citas_activado"
+            checked={formData.citas_activado || false}
+            onChange={handleChange}
+            className="w-5 h-5 bg-gray-700 border-gray-600 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+          />
+          {formData.citas_activado ? (
+            <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium">
+              <CheckCircle size={14} /> Activado
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs text-rose-400 font-medium">
+              <XCircle size={14} /> Desactivado
+            </span>
+          )}
+        </div>
+
         {/* Dirección DTE */}
         <div className="md:col-span-2">
           <div className="bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
-            <p className="text-sm font-semibold text-purple-400 mb-2">
-              📍 Ubicación para DTE (requerido para facturación electrónica)
+            <p className="text-sm font-semibold text-purple-400 mb-2 flex items-center gap-1">
+              <MapPin size={16} /> Ubicación para DTE (requerido para facturación electrónica)
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -529,7 +589,9 @@ const OrganizationForm = ({ initialData = {}, onSubmit, onCancel, loading }) => 
         {!isEditing && (
           <>
             <div className="md:col-span-2 border-t border-gray-700 pt-4 mt-2">
-              <h4 className="text-md font-semibold text-purple-400 mb-2">👤 Administrador Inicial</h4>
+              <h4 className="text-md font-semibold text-purple-400 mb-2 flex items-center gap-1">
+                <User size={16} /> Administrador Inicial
+              </h4>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Nombre Admin *</label>

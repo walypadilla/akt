@@ -34,7 +34,7 @@ const ExamenForm = ({
   useEffect(() => {
     const loadProductos = async () => {
       try {
-        const data = await getProductos({ limit: 99999 });
+        const data = await getProductos({ limit: 99999, tipo: 'Servicio' });
         setProductos(data.productos || data || []);
       } catch (err) {
         console.error('Error al cargar productos:', err);

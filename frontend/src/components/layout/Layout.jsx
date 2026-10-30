@@ -15,7 +15,7 @@ const Layout = () => {
         <Header />
         
         {/* Contenedor principal con scroll independiente */}
-        <main className="flex-1 overflow-y-auto p-4 bg-[#0b0f19]">
+        <main className="flex-1 overflow-y-auto p-1 bg-[#0b0f19]">
           <Outlet />
         </main>
       </div>
