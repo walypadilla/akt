@@ -119,6 +119,7 @@ router.get('/vacunas/cartilla/:paciente_id', vacunaController.getCartilla);
 router.get('/vacunas/cartilla/:paciente_id/pdf', vacunaController.generarPDFCartillaPrivada);
 router.post('/vacunas/aplicar', vacunaController.aplicarVacuna);
 router.put('/vacunas/aplicar/:id', vacunaController.editarAplicacionVacuna);
+router.delete('/vacunas/aplicar/:id', vacunaController.deleteAplicacion);
 router.post('/vacunas/cartilla/:paciente_id/token', vacunaController.generarTokenCartilla);
 
 // ========== HISTORIAL PESOO ================================00

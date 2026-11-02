@@ -61,7 +61,10 @@ const Vacunas = () => {
   // Dashboard y Período
   const [dashboard, setDashboard] = useState({ aplicadasMes: 0, proximas: 0, vencidas: 0, topVacunas: [] });
   const [anioDashboard, setAnioDashboard] = useState(hoy.getFullYear());
-  const [mesDashboard, setMesDashboard] = useState(hoy.getMonth() + 1);
+  
+  // 👇 '' significa GLOBAL (Todos los meses)
+  const [mesDashboard, setMesDashboard] = useState(''); 
+  
   const [aniosDisponibles, setAniosDisponibles] = useState([hoy.getFullYear()]);
   const [cargandoDashboard, setCargandoDashboard] = useState(false);
 
@@ -291,10 +294,10 @@ const Vacunas = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `vacunas_${todos ? 'todas' : 'mes'}_${getTodayLocal()}.csv`;
+      a.download = `vacunas_${todos ? 'todas' : mesDashboard ? 'mes' : 'anio'}_${getTodayLocal()}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
-      toast.success(`Reporte ${todos ? 'completo' : 'del mes'} exportado`);
+      toast.success(`Reporte exportado correctamente`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error al exportar');
     }
@@ -307,7 +310,7 @@ const Vacunas = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `top5_vacunas_${mesDashboard}_${anioDashboard}.csv`;
+      a.download = `top5_vacunas_${mesDashboard || 'global'}_${anioDashboard}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success('Reporte Top 5 exportado');
@@ -377,6 +380,7 @@ const Vacunas = () => {
         </div>
       </div>
 
+      {/* FILTRO DE PERIODO */}
       <div className="bg-gray-800/90 rounded-xl shadow-xl border border-gray-700/80 p-3 flex flex-wrap items-center gap-3">
         <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
           <Calendar size={14} className="text-purple-400" /> Período
@@ -384,11 +388,19 @@ const Vacunas = () => {
         <select value={anioDashboard} onChange={(e) => setAnioDashboard(parseInt(e.target.value))} className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white">
           {aniosDisponibles.map((a) => <option key={a} value={a}>Año: {a}</option>)}
         </select>
-        <select value={mesDashboard} onChange={(e) => setMesDashboard(parseInt(e.target.value))} className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white">
+        <select 
+          value={mesDashboard} 
+          onChange={(e) => setMesDashboard(e.target.value ? parseInt(e.target.value) : '')} 
+          className="bg-gray-900/80 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white"
+        >
+          <option value="">Todos los meses</option>
           {MESES.map((n, i) => <option key={i + 1} value={i + 1}>{n}</option>)}
         </select>
-        <button onClick={() => { setAnioDashboard(hoy.getFullYear()); setMesDashboard(hoy.getMonth() + 1); }} className="text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 font-semibold transition">
-          Mes Actual
+        <button 
+          onClick={() => { setAnioDashboard(hoy.getFullYear()); setMesDashboard(''); }} 
+          className="text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 font-semibold transition"
+        >
+          Ver Todo
         </button>
         
         {activeTab === 'catalogo' && (
@@ -401,8 +413,12 @@ const Vacunas = () => {
 
         {activeTab === 'historial' && (
           <div className="ml-auto flex gap-2">
-            <button onClick={() => handleExportar(false)} disabled={dashboard.aplicadasMes === 0} className="bg-cyan-600/20 hover:bg-cyan-600 disabled:opacity-50 text-cyan-300 hover:text-white border border-cyan-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
-              <Download size={14} /> Exportar Mes
+            <button 
+              onClick={() => handleExportar(false)} 
+              disabled={dashboard.aplicadasMes === 0} 
+              className="bg-cyan-600/20 hover:bg-cyan-600 disabled:opacity-50 text-cyan-300 hover:text-white border border-cyan-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <Download size={14} /> {mesDashboard ? 'Exportar Mes' : 'Exportar Año'}
             </button>
           </div>
         )}
@@ -413,7 +429,10 @@ const Vacunas = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div onClick={() => { setFiltroHistorial('aplicadas'); setPage(1); }} className={`cursor-pointer p-4 rounded-xl shadow-lg border flex items-center gap-3 transition ${filtroHistorial === 'aplicadas' ? 'bg-cyan-900/40 border-cyan-500' : 'bg-gray-800/90 border-gray-700 hover:bg-gray-800'}`}>
               <CheckCircle className={`w-8 h-8 ${filtroHistorial === 'aplicadas' ? 'text-white' : 'text-cyan-400'}`} />
-              <div><p className="text-sm text-gray-300">Aplicadas {MESES_CORTO[mesDashboard - 1]}</p><p className="text-2xl font-bold text-white">{dashboard.aplicadasMes || 0}</p></div>
+              <div>
+                <p className="text-sm text-gray-300">Aplicadas {mesDashboard ? MESES_CORTO[mesDashboard - 1] : 'en el año'}</p>
+                <p className="text-2xl font-bold text-white">{dashboard.aplicadasMes || 0}</p>
+              </div>
             </div>
             <div onClick={() => { setFiltroHistorial('proximas'); setPage(1); }} className={`cursor-pointer p-4 rounded-xl shadow-lg border flex items-center gap-3 transition ${filtroHistorial === 'proximas' ? 'bg-yellow-900/40 border-yellow-500' : 'bg-gray-800/90 border-gray-700 hover:bg-gray-800'}`}>
               <Clock className={`w-8 h-8 ${filtroHistorial === 'proximas' ? 'text-white' : 'text-yellow-400'}`} />
@@ -429,7 +448,8 @@ const Vacunas = () => {
             <div className="bg-gray-800/90 p-4 rounded-xl shadow-lg border border-gray-700">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-sm font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
-                  <TrendingUp size={16} className="text-purple-400" /> Top 5 Vacunas ({MESES[mesDashboard - 1]} {anioDashboard})
+                  <TrendingUp size={16} className="text-purple-400" /> 
+                  Top 5 Vacunas ({mesDashboard ? MESES[mesDashboard - 1] : 'Global'} {anioDashboard})
                 </h3>
                 <button onClick={handleExportarTop5} className="bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
                   <Download size={13} /> Exportar Reporte Top 5
@@ -465,12 +485,12 @@ const Vacunas = () => {
             <table className="min-w-full divide-y divide-gray-700/80 text-xs">
               <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
                 <tr>
-                  <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
-                  <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Producto (Stock)</th>
-                  <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Recordatorio</th>
-                  <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Precio</th>
-                  <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                  <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                  <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Nombre</th>
+                  <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Producto (Stock)</th>
+                  <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Recordatorio</th>
+                  <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Precio</th>
+                  <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                  <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -484,24 +504,24 @@ const Vacunas = () => {
                 ) : (
                   vacunasPaginadas.map((v) => (
                     <tr key={v.id} className={`hover:bg-gray-700/30 transition-colors ${!v.activo ? 'opacity-50' : ''}`}>
-                      <td className="px-3 py-2 text-white font-semibold whitespace-nowrap">
+                      <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">
                         <div className="flex items-center gap-2"><Syringe size={12} className="text-purple-400" /> {v.nombre}</div>
                       </td>
-                      <td className="px-3 py-2 text-gray-300 whitespace-nowrap">
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
                         {v.producto_nombre ? (
                           <span className="inline-flex items-center gap-1"><Package size={10} className="text-purple-400" /> {v.producto_nombre} <span className={`ml-1 text-xs ${v.producto_stock > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>({v.producto_stock})</span></span>
                         ) : (
                           <span className="text-rose-400 italic">Sin producto</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-gray-300 whitespace-nowrap">{v.dias_recordatorio} días</td>
-                      <td className="px-3 py-2 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(v.producto_precio || 0).toFixed(2)}</td>
-                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                      <td className="px-2 py-1 text-gray-300 whitespace-nowrap">{v.dias_recordatorio} días</td>
+                      <td className="px-2 py-1 text-emerald-400 font-bold whitespace-nowrap">${parseFloat(v.producto_precio || 0).toFixed(2)}</td>
+                      <td className="px-2 py-1 text-center whitespace-nowrap">
                         <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${v.activo ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700/50' : 'bg-rose-900/40 text-rose-300 border-rose-700/50'}`}>
                           {v.activo ? 'Activa' : 'Inactiva'}
                         </span>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
+                      <td className="px-2 py-1 whitespace-nowrap">
                         <div className="flex items-center justify-center gap-2">
                           {v.activo ? (
                             <>
@@ -509,7 +529,7 @@ const Vacunas = () => {
                               <button onClick={() => handleDeleteCatalogo(v)} className="flex items-center gap-1.5 px-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 rounded-lg transition font-medium text-xs border border-rose-500/30"><Trash2 size={14} /> Desactivar</button>
                             </>
                           ) : (
-                            <button onClick={() => handleReactivar(v)} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow-md shadow-emerald-900/20 font-medium text-xs"><RotateCcw size={14} /> Reactivar</button>
+                            <button onClick={() => handleReactivar(v)} className="flex items-center gap-1.5 px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow-md shadow-emerald-900/20 font-medium text-xs"><RotateCcw size={14} /> Reactivar</button>
                           )}
                         </div>
                       </td>
@@ -520,7 +540,6 @@ const Vacunas = () => {
             </table>
           </div>
 
-          {/* DISEÑO MEJORADO DE PAGINACIÓN */}
           <div className="flex items-center justify-between px-4 py-3 bg-gray-900/60 border-t border-gray-700/80">
             <span className="text-xs font-medium text-gray-300">
               Mostrando página <strong className="text-purple-400">{catalogoPage}</strong> de <strong className="text-white">{totalCatalogoPages}</strong> ({vacunasFiltradas.length} vacunas en total)
@@ -551,7 +570,9 @@ const Vacunas = () => {
           <div className="px-4 py-2.5 border-b border-gray-700/80 bg-gray-800/40 flex flex-col sm:flex-row justify-between items-center gap-3">
             <h3 className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
               <History size={14} className="text-cyan-400" />
-              Estado de Vacunación por Paciente ({MESES[mesDashboard - 1]} {anioDashboard})
+              {mesDashboard 
+                ? `Aplicaciones de ${MESES[mesDashboard - 1]} ${anioDashboard}` 
+                : 'Estado de Vacunación Global (Última dosis)'}
             </h3>
             
             <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -576,12 +597,12 @@ const Vacunas = () => {
                 <table className="min-w-full divide-y divide-gray-700/80 text-xs">
                   <thead className="bg-gray-900/90 sticky top-0 z-10 backdrop-blur-md">
                     <tr>
-                      <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Paciente</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Vacuna</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Última Dosis</th>
-                      <th className="px-3 py-2 text-left font-bold text-gray-300 uppercase tracking-wider">Próxima Dosis</th>
-                      <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Estado</th>
-                      <th className="px-3 py-2 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
+                      <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Paciente</th>
+                      <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Vacuna</th>
+                      <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Última Dosis</th>
+                      <th className="px-2 py-1.5 text-left font-bold text-gray-300 uppercase tracking-wider">Próxima Dosis</th>
+                      <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Estado</th>
+                      <th className="px-2 py-1.5 text-center font-bold text-gray-300 uppercase tracking-wider">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-700/60 bg-gray-800/30">
@@ -593,24 +614,31 @@ const Vacunas = () => {
 
                       return (
                         <tr key={idx} className="hover:bg-gray-700/30 transition-colors">
-                          <td className="px-3 py-2 text-white font-semibold whitespace-nowrap">
+                          <td className="px-2 py-1 text-white font-semibold whitespace-nowrap">
                             {h.paciente_nombre} {h.paciente_apellidos || ''} {h.especie ? `(${h.especie})` : ''}
                             <br/><span className="text-[10px] text-gray-400 font-normal">Dueño: {h.cliente_nombre}</span>
                           </td>
-                          <td className="px-3 py-2 text-purple-300 font-bold whitespace-nowrap">{h.vacuna_nombre}</td>
-                          <td className="px-3 py-2 text-gray-300 whitespace-nowrap">{new Date(h.fecha_aplicacion).toLocaleDateString('es-SV')}</td>
-                          <td className="px-3 py-2 text-amber-400 whitespace-nowrap">{h.fecha_proxima ? new Date(h.fecha_proxima).toLocaleDateString('es-SV') : '-'}</td>
-                          <td className="px-3 py-2 text-center whitespace-nowrap">
+                          <td className="px-2 py-1 text-purple-300 font-bold whitespace-nowrap">{h.vacuna_nombre}</td>
+                          <td className="px-2 py-1 text-gray-300 whitespace-nowrap">
+                            {new Date(h.fecha_aplicacion).toLocaleDateString('es-SV')}
+                            {h.dias_retraso > 0 && (
+                              <span className="ml-2 text-[10px] text-amber-400 font-bold" title="Aplicada después del vencimiento">
+                                (+{h.dias_retraso}d tarde)
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-2 py-1 text-amber-400 whitespace-nowrap">{h.fecha_proxima ? new Date(h.fecha_proxima).toLocaleDateString('es-SV') : '-'}</td>
+                          <td className="px-2 py-1 text-center whitespace-nowrap">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badge}`}>
                               {h.fecha_proxima && h.dias_restantes < 0 ? `Vencida (${Math.abs(h.dias_restantes)}d)` : 
                                h.fecha_proxima && h.dias_restantes <= 30 ? `Próxima (${h.dias_restantes}d)` : 'Al día'}
                             </span>
                           </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
+                          <td className="px-2 py-1 whitespace-nowrap">
                             <div className="flex items-center justify-center gap-2">
                               <button
                                 onClick={() => openApplyModal(h.paciente_id, h.vacuna_id)}
-                                className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow-md shadow-emerald-900/20 font-bold text-xs"
+                                className="flex items-center gap-1.5 px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow-md shadow-emerald-900/20 font-bold text-xs"
                                 title="Aplicar nueva dosis"
                               >
                                 <Plus size={12} /> Aplicar
@@ -635,7 +663,6 @@ const Vacunas = () => {
                 </table>
               </div>
 
-              {/* DISEÑO MEJORADO DE PAGINACIÓN HISTORIAL */}
               <div className="flex items-center justify-between px-4 py-3 bg-gray-900/60 border-t border-gray-700/80">
                 <span className="text-xs font-medium text-gray-300">
                   Mostrando página <strong className="text-purple-400">{page}</strong> de <strong className="text-white">{totalPages}</strong>

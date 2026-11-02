@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Clipboard, Search, Plus, Edit2, Eye, X, Download, Filter,
   Printer, FileText, CheckCircle, Clock, DollarSign, Calendar, Hash, User, Activity, AlertCircle,
-  TrendingUp, TrendingDown, Users
+  TrendingUp, TrendingDown, Users, Lock, Trash2,  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import {
@@ -243,6 +243,9 @@ const Consultas = () => {
         precio_unitario: parseFloat(ex.precio || 0),
         tipo_venta: 'Gravado',
         _esExamen: true,
+        _bloqueado: true,      
+        _origen: 'Examen',
+        _origen_id: ex.solicitud_id, 
         _examenNombre: ex.examen_nombre,
       }));
 
@@ -252,6 +255,9 @@ const Consultas = () => {
         precio_unitario: parseFloat(v.precio_unitario || 0),
         tipo_venta: 'Gravado',
         _esVacuna: true,
+        _bloqueado: true,
+        _origen: 'Vacuna',
+        _origen_id: v.historial_id,
         _vacunaNombre: v.vacuna_nombre,
         _lote: v.lote,
       }));
@@ -310,7 +316,18 @@ const Consultas = () => {
   };
 
   const removeServicio = (index) => {
+    const servicio = facturaData.servicios[index];
+
+    if (servicio?._bloqueado || servicio?._esExamen || servicio?._esVacuna) {
+      toast.warning(
+        'Este ítem está vinculado a un examen o vacuna. ' +
+        'Para quitarlo, primero anule el examen o elimine la vacuna desde su módulo.'
+      );
+      return;
+    }
+
     if (facturaData.servicios.length === 1) return;
+
     const nuevos = facturaData.servicios.filter((_, i) => i !== index);
     setFacturaData({ ...facturaData, servicios: nuevos });
   };
@@ -935,7 +952,12 @@ const Consultas = () => {
                         <select
                           value={serv.producto_id}
                           onChange={(e) => updateServicio(idx, 'producto_id', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          disabled={serv._bloqueado}
+                          className={`w-full px-2 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                            serv._bloqueado
+                              ? 'bg-gray-800 border-gray-700 text-gray-400 cursor-not-allowed'
+                              : 'bg-gray-700 border-gray-600 text-white'
+                          }`}
                         >
                           <option value="">Seleccionar servicio</option>
                           {productos.map((p) => (
@@ -977,7 +999,12 @@ const Consultas = () => {
                           step="0.01"
                           value={serv.precio_unitario}
                           onChange={(e) => updateServicio(idx, 'precio_unitario', parseFloat(e.target.value) || 0)}
-                          className="w-full pl-5 pr-1 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm text-right focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          disabled={serv._bloqueado}
+                          className={`w-full pl-5 pr-1 py-1.5 border rounded-md text-sm text-right focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                            serv._bloqueado
+                              ? 'bg-gray-800 border-gray-700 text-gray-400 cursor-not-allowed'
+                              : 'bg-gray-700 border-gray-600 text-white'
+                          }`}
                         />
                       </div>
 
@@ -1003,11 +1030,20 @@ const Consultas = () => {
                         {facturaData.servicios.length > 1 && (
                           <button
                             type="button"
+                            disabled={serv._bloqueado}
+                            title={
+                              serv._bloqueado
+                                ? 'Vinculado a examen/vacuna. Anule desde su módulo.'
+                                : 'Quitar servicio'
+                            }
                             onClick={() => removeServicio(idx)}
-                            className="text-rose-400 hover:text-rose-300 transition"
-                            title="Eliminar servicio"
+                            className={
+                              serv._bloqueado
+                                ? 'text-gray-500 cursor-not-allowed'
+                                : 'text-red-400 hover:text-red-300'
+                            }
                           >
-                            <X size={14} />
+                            {serv._bloqueado ? <Lock size={14} /> : <Trash2 size={14} />}
                           </button>
                         )}
                       </div>

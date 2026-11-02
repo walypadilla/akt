@@ -414,6 +414,11 @@ export const editarAplicacionVacuna = async (id, data) => {
   return response.data;
 };
 
+export const eliminarAplicacionVacuna = async (id) => {
+  const response = await apiClient.delete(`/organization/vacunas/aplicar/${id}`);
+  return response.data;
+};
+
 export const getProximasVacunas = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
   const response = await apiClient.get(`/organization/vacunas/proximas?${query}`);

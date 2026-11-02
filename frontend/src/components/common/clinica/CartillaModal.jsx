@@ -2,9 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   X, Syringe, Printer, Link as LinkIcon, Check, Copy,
-  Download, Calendar, User, Package, FileText, ChevronDown, ChevronUp, Edit2, Save
+  Download, Calendar, User, Package, FileText, Trash2, ChevronDown, ChevronUp, Edit2, Save
 } from 'lucide-react';
-import { getCartillaPaciente, generarPDFCartilla, generarTokenCartilla, editarAplicacionVacuna } from '../../../api/clinica';
+import { getCartillaPaciente, generarPDFCartilla, generarTokenCartilla, editarAplicacionVacuna, eliminarAplicacionVacuna } from '../../../api/clinica';
 import { useAuth } from '../../../hooks/useAuth';
 import { buildFileUrl } from '../../../api/clinica';
 import LoadingSpinner from '../../common/LoadingSpinner';
@@ -22,6 +22,9 @@ const CartillaModal = ({ paciente, onClose }) => {
   // Estados para edición inline de una aplicación
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ fecha_aplicacion: '', fecha_proxima: '', lote: '', observaciones: '' });
+  const [confirmDelete, setConfirmDelete] = useState({ open: false, historial: null });
+  const [deleting, setDeleting] = useState(false);
+
 
   const logoUrl = buildFileUrl(user?.organizacion?.logo_url || user?.logo_url);
 
@@ -108,6 +111,21 @@ const CartillaModal = ({ paciente, onClose }) => {
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete.historial) return;
+    setDeleting(true);
+    try {
+      await eliminarAplicacionVacuna(confirmDelete.historial.id);
+      toast.success('Aplicación eliminada');
+      setConfirmDelete({ open: false, historial: null });
+      cargarCartilla();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error al eliminar');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const vacunasAgrupadas = useMemo(() => {
     const map = {};
     historial.forEach(h => {
@@ -126,10 +144,13 @@ const CartillaModal = ({ paciente, onClose }) => {
 
     Object.values(map).forEach(grupo => {
       grupo.historial.sort((a, b) => new Date(b.fecha_aplicacion) - new Date(a.fecha_aplicacion));
-      const ultimo = grupo.historial[0];
-      grupo.ultima = ultimo;
-      grupo.semaforo = ultimo.semaforo;
-      grupo.mensaje = ultimo.mensaje_semaforo;
+      
+      // Buscamos la última que NO esté cancelada para calcular el semáforo
+      const ultimoActivo = grupo.historial.find(h => h.estado !== 'Cancelada');
+      
+      grupo.ultima = ultimoActivo || grupo.historial[0];
+      grupo.semaforo = grupo.ultima.semaforo;
+      grupo.mensaje = grupo.ultima.mensaje_semaforo;
     });
 
     return Object.values(map);
@@ -240,7 +261,7 @@ const CartillaModal = ({ paciente, onClose }) => {
                                 const isEditing = editingId === h.id;
 
                                 return (
-                                  <tr key={h.id} className="text-gray-300">
+                                  <tr key={h.id} className={`text-gray-300 ${h.estado === 'Cancelada' ? 'opacity-50' : ''}`}>
                                     {isEditing ? (
                                       <>
                                         <td className="py-2">
@@ -288,19 +309,49 @@ const CartillaModal = ({ paciente, onClose }) => {
                                       </>
                                     ) : (
                                       <>
-                                        <td className="py-2 whitespace-nowrap">{new Date(h.fecha_aplicacion).toLocaleDateString('es-SV')}</td>
+                                        <td className="py-2 whitespace-nowrap">
+                                          {new Date(h.fecha_aplicacion).toLocaleDateString('es-SV')}
+                                          {h.estado === 'Cancelada' && (
+                                            <span className="ml-2 px-1.5 py-0.5 bg-rose-900/50 text-rose-300 border border-rose-700/50 rounded text-[9px] font-bold">
+                                              CANCELADA
+                                            </span>
+                                          )}
+                                          {h.dias_retraso > 0 && h.estado !== 'Cancelada' && (
+                                            <span className="ml-2 text-[10px] text-amber-400 font-bold" title="Aplicada después del vencimiento">
+                                              (+{h.dias_retraso}d tarde)
+                                            </span>
+                                          )}
+                                        </td>
                                         <td className="py-2 whitespace-nowrap">{h.fecha_proxima ? new Date(h.fecha_proxima).toLocaleDateString('es-SV') : '-'}</td>
                                         <td className="py-2 font-mono">{h.lote || '-'}</td>
                                         <td className="py-2">{h.medico_nombre || '-'}</td>
                                         <td className="py-2 text-cyan-400">{h.factura_numero || '-'}</td>
                                         <td className="py-2 italic text-gray-400 max-w-[150px] truncate" title={h.observaciones}>{h.observaciones || '-'}</td>
                                         <td className="py-2 text-center whitespace-nowrap">
-                                          <button 
-                                            onClick={() => handleStartEdit(h)} 
-                                            className="p-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 rounded hover:bg-yellow-500 hover:text-white transition"
+                                          <button
+                                            onClick={() => handleStartEdit(h)}
+                                            className="p-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 rounded hover:bg-yellow-500 hover:text-white transition mr-1"
                                             title="Editar aplicación"
                                           >
                                             <Edit2 size={13} />
+                                          </button>
+                                          <button
+                                            onClick={() => setConfirmDelete({ open: true, historial: h })}
+                                            disabled={h.factura_estado === 'Pagada' || (h.factura_id && h.factura_estado !== 'Anulada')}
+                                            title={
+                                              h.factura_estado === 'Pagada'
+                                                ? 'Factura pagada: no se puede eliminar'
+                                                : h.factura_id && h.factura_estado !== 'Anulada'
+                                                ? 'Vinculada a factura activa: anule primero la factura'
+                                                : 'Eliminar aplicación'
+                                            }
+                                            className={`p-1 rounded transition border ${
+                                              h.factura_id && h.factura_estado && h.factura_estado !== 'Anulada'
+                                                ? 'bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed'
+                                                : 'bg-rose-500/20 text-rose-400 border-rose-500/40 hover:bg-rose-500 hover:text-white'
+                                            }`}
+                                          >
+                                            <Trash2 size={13} />
                                           </button>
                                         </td>
                                       </>
@@ -347,8 +398,46 @@ const CartillaModal = ({ paciente, onClose }) => {
           <button onClick={onClose} className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition">Cerrar</button>
         </div>
       </div>
+
+      {confirmDelete.open && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+          <div className="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-sm w-full p-6">
+            <div className="w-14 h-14 rounded-full bg-rose-600/20 flex items-center justify-center mx-auto mb-4">
+              <Trash2 size={28} className="text-rose-400" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2 text-center">Eliminar aplicación</h3>
+            <p className="text-sm text-gray-300 mb-6 text-center">
+              ¿Eliminar la aplicación de <strong className="text-white">{confirmDelete.historial?.vacuna_nombre}</strong>{' '}
+              del {confirmDelete.historial?.fecha_aplicacion
+                ? new Date(confirmDelete.historial.fecha_aplicacion).toLocaleDateString('es-SV')
+                : ''}?<br />
+              <span className="text-xs text-amber-400">Se devolverá 1 unidad al stock del producto.</span>
+            </p>
+            <div className="flex justify-center gap-3">
+              <button
+                onClick={() => setConfirmDelete({ open: false, historial: null })}
+                className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition"
+                disabled={deleting}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-lg transition font-bold"
+              >
+                {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
+
   );
 };
+
+
 
 export default CartillaModal;

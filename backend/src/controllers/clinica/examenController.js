@@ -256,6 +256,30 @@ exports.cancelar = async (req, res) => {
   try {
     const { id } = req.params;
     const organizacion_id = req.organizacion_id;
+
+    // 🔎 Verificar si la solicitud está vinculada a una factura activa
+    const [rows] = await pool.query(
+      `SELECT s.factura_id, f.estado AS factura_estado, f.numero_correlativo
+       FROM solicitudes_examen s
+       LEFT JOIN facturas f ON s.factura_id = f.id
+       WHERE s.id = ? AND s.organizacion_id = ?`,
+      [id, organizacion_id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Solicitud no encontrada' });
+    }
+
+    const { factura_id, factura_estado, numero_correlativo } = rows[0];
+
+    if (factura_id && factura_estado && factura_estado !== 'Anulada') {
+      return res.status(400).json({
+        message:
+          `No se puede cancelar este examen porque está vinculado a la factura ${numero_correlativo || factura_id} ` +
+          `(estado: "${factura_estado}"). Primero anule la factura o emita una nota de crédito.`,
+      });
+    }
+
     const updated = await SolicitudExamen.cancelar(id, organizacion_id);
     if (!updated) {
       return res.status(404).json({ message: 'Solicitud no encontrada' });
@@ -270,13 +294,12 @@ exports.cancelar = async (req, res) => {
 exports.listarSolicitudes = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
-    const { paciente_id, estado, consulta_id } = req.query;
-    const solicitudes = await SolicitudExamen.findAll(organizacion_id, {
-      paciente_id,
-      estado,
-      consulta_id
-    });
-    res.json(solicitudes);
+    const { paciente_id, estado, consulta_id, search, fecha_inicio, fecha_fin, examen_id, page, limit } = req.query;
+    const result = await SolicitudExamen.findAll(organizacion_id, {
+      paciente_id, estado, consulta_id, search, fecha_inicio, fecha_fin, examen_id
+    }, page, limit);
+    
+    res.json(result);
   } catch (error) {
     console.error('Error al listar solicitudes:', error);
     res.status(500).json({ message: 'Error al listar solicitudes' });

@@ -796,3 +796,88 @@ exports.exportarTopVacunas = async (req, res) => {
     res.status(500).json({ message: 'Error al exportar top 5 vacunas' });
   }
 };
+
+// ========== ELIMINAR APLICACIÓN DE VACUNA (con reversión de stock) ==========
+exports.deleteAplicacion = async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { id } = req.params;
+    const organizacion_id = req.organizacion_id;
+    const usuario_id = req.usuario_id;
+
+    const [rows] = await connection.query(
+      `SELECT h.*, v.producto_id, v.nombre AS vacuna_nombre,
+              f.estado AS factura_estado, f.numero_correlativo
+       FROM historial_vacunas h
+       JOIN vacunas v ON h.vacuna_id = v.id
+       LEFT JOIN facturas f ON h.factura_id = f.id
+       WHERE h.id = ? AND h.organizacion_id = ?`,
+      [id, organizacion_id]
+    );
+
+    if (rows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Registro de aplicación no encontrado' });
+    }
+
+    const reg = rows[0];
+
+    if (reg.factura_id && reg.factura_estado && reg.factura_estado !== 'Anulada') {
+      await connection.rollback();
+      return res.status(400).json({
+        message:
+          `No se puede cancelar esta aplicación porque está vinculada a la factura ` +
+          `${reg.numero_correlativo || reg.factura_id} (estado: "${reg.factura_estado}"). ` +
+          `Primero anule la factura o emita una nota de crédito.`,
+      });
+    }
+
+    // Devolver stock al producto
+    if (reg.producto_id) {
+      const [prod] = await connection.query(
+        'SELECT stock_actual, nombre FROM productos WHERE id = ? AND organizacion_id = ?',
+        [reg.producto_id, organizacion_id]
+      );
+      if (prod.length > 0) {
+        const stockAnterior = prod[0].stock_actual;
+        const nuevoStock = stockAnterior + 1;
+
+        await connection.query(
+          'UPDATE productos SET stock_actual = ? WHERE id = ? AND organizacion_id = ?',
+          [nuevoStock, reg.producto_id, organizacion_id]
+        );
+
+        await InventoryMovement.create({
+          organizacion_id,
+          producto_id: reg.producto_id,
+          tipo_movimiento: 'Entrada',
+          cantidad: 1,
+          stock_anterior: stockAnterior,
+          stock_nuevo: nuevoStock,
+          referencia_tipo: 'Devolucion',
+          referencia_id: reg.id,
+          costo_unitario: 0,
+          observacion: `Cancelación de aplicación de ${reg.vacuna_nombre}`,
+          usuario_id,
+        }, connection);
+      }
+    }
+
+    //  SOFT DELETE: Solo cambiamos el estado
+    await connection.query(
+      'UPDATE historial_vacunas SET estado = "Cancelada" WHERE id = ? AND organizacion_id = ?',
+      [id, organizacion_id]
+    );
+
+    await connection.commit();
+    res.json({ message: 'Aplicación de vacuna cancelada correctamente' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error al cancelar aplicación:', error);
+    res.status(500).json({ message: 'Error al cancelar aplicación', error: error.message });
+  } finally {
+    connection.release();
+  }
+};

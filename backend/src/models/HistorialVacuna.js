@@ -46,7 +46,8 @@ class HistorialVacuna {
        JOIN pacientes p ON h.paciente_id = p.id
        JOIN clientes c ON p.cliente_id = c.id
        JOIN vacunas v ON h.vacuna_id = v.id
-       WHERE h.organizacion_id = ?
+       WHERE h.organizacion_id = ? 
+         AND h.estado = 'Activa'
          AND h.fecha_proxima IS NOT NULL
          AND h.fecha_proxima <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
        ORDER BY h.fecha_proxima ASC`,
@@ -55,32 +56,44 @@ class HistorialVacuna {
     return rows;
   }
 
-  // Cartilla completa con semáforo (verde/amarillo/rojo)
+  // Cartilla completa con semáforo y cálculo de retraso
   static async getCartillaPaciente(paciente_id, organizacion_id) {
     const [rows] = await pool.query(
-      `SELECT 
-        h.*,
-        v.nombre AS vacuna_nombre,
-        v.dias_recordatorio,
-        u.nombre AS medico_nombre,
-        f.numero_correlativo AS factura_numero,
-        f.estado AS factura_estado,
-        DATEDIFF(h.fecha_proxima, CURDATE()) AS dias_restantes
-       FROM historial_vacunas h
-       JOIN vacunas v ON h.vacuna_id = v.id
-       LEFT JOIN medicos m ON h.medico_id = m.id
-       LEFT JOIN usuarios u ON m.usuario_id = u.id
-       LEFT JOIN facturas f ON h.factura_id = f.id
-       WHERE h.paciente_id = ? AND h.organizacion_id = ?
-       ORDER BY h.fecha_aplicacion DESC`,
+      `WITH Ranked AS (
+        SELECT h.*,
+               v.nombre AS vacuna_nombre,
+               v.dias_recordatorio,
+               u.nombre AS medico_nombre,
+               f.numero_correlativo AS factura_numero,
+               f.estado AS factura_estado,
+               ROW_NUMBER() OVER(PARTITION BY h.paciente_id, h.vacuna_id ORDER BY h.fecha_aplicacion ASC, h.id ASC) as rn,
+               LAG(h.fecha_proxima) OVER(PARTITION BY h.paciente_id, h.vacuna_id ORDER BY h.fecha_aplicacion ASC, h.id ASC) as prev_fecha_proxima
+        FROM historial_vacunas h
+        JOIN vacunas v ON h.vacuna_id = v.id
+        LEFT JOIN medicos m ON h.medico_id = m.id
+        LEFT JOIN usuarios u ON m.usuario_id = u.id
+        LEFT JOIN facturas f ON h.factura_id = f.id
+        WHERE h.paciente_id = ? AND h.organizacion_id = ?
+      )
+      SELECT *,
+             DATEDIFF(fecha_proxima, CURDATE()) AS dias_restantes,
+             CASE
+                 WHEN fecha_aplicacion > prev_fecha_proxima THEN DATEDIFF(fecha_aplicacion, prev_fecha_proxima)
+                 ELSE 0
+             END AS dias_retraso
+      FROM Ranked
+      ORDER BY fecha_aplicacion DESC`,
       [paciente_id, organizacion_id]
     );
 
-    // Agregar semáforo calculado
     return rows.map((r) => {
       let semaforo = 'gris';
       let mensaje = 'Sin fecha próxima registrada';
-      if (r.fecha_proxima) {
+
+      if (r.estado === 'Cancelada') {
+        semaforo = 'cancelada';
+        mensaje = 'Aplicación cancelada';
+      } else if (r.fecha_proxima) {
         if (r.dias_restantes < 0) {
           semaforo = 'rojo';
           mensaje = `Vencida hace ${Math.abs(r.dias_restantes)} días`;
@@ -97,36 +110,19 @@ class HistorialVacuna {
   }
 
   static async create(data) {
-    const {
-      organizacion_id, paciente_id, vacuna_id, consulta_id,
-      fecha_aplicacion, fecha_proxima, lote, observaciones, medico_id,
-    } = data;
-
+    const { organizacion_id, paciente_id, vacuna_id, consulta_id, fecha_aplicacion, fecha_proxima, lote, observaciones, medico_id } = data;
     const [result] = await pool.query(
       `INSERT INTO historial_vacunas
-       (organizacion_id, paciente_id, vacuna_id, consulta_id, medico_id,
-        fecha_aplicacion, fecha_proxima, lote, observaciones)
+       (organizacion_id, paciente_id, vacuna_id, consulta_id, medico_id, fecha_aplicacion, fecha_proxima, lote, observaciones)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        organizacion_id,
-        paciente_id,
-        vacuna_id,
-        consulta_id || null,
-        medico_id || null,
-        fecha_aplicacion,
-        fecha_proxima || null,
-        lote || null,
-        observaciones || null,
-      ]
+      [organizacion_id, paciente_id, vacuna_id, consulta_id || null, medico_id || null, fecha_aplicacion, fecha_proxima || null, lote || null, observaciones || null]
     );
     return result.insertId;
   }
 
   static async updateFactura(id, organizacion_id, factura_id) {
     const [result] = await pool.query(
-      `UPDATE historial_vacunas 
-      SET factura_id = ? 
-      WHERE id = ? AND organizacion_id = ?`,
+      `UPDATE historial_vacunas SET factura_id = ? WHERE id = ? AND organizacion_id = ?`,
       [factura_id, id, organizacion_id]
     );
     return result.affectedRows > 0;
@@ -136,41 +132,42 @@ class HistorialVacuna {
     const [rows] = await pool.query(
       `SELECT p.id AS paciente_id, p.nombre, p.apellidos, p.codigo_expediente,
               p.fecha_nacimiento, p.genero, p.especie, p.raza,
-              o.nombre_empresa, o.logo_url, o.telefono, o.correo_contacto
+              o.nombre_empresa, o.logo_url, o.telefono, o.correo_contacto, o.id AS organizacion_id
        FROM pacientes p
        JOIN organizaciones o ON p.organizacion_id = o.id
-       WHERE p.cartilla_token = ? 
-         AND p.cartilla_token_expira > NOW()
+       WHERE p.cartilla_token = ? AND p.cartilla_token_expira > NOW()
        LIMIT 1`,
       [token]
     );
     return rows[0];
   }
 
-  // Dashboard KPIs
+  // Dashboard KPIs (Aplicadas por mes, pero Próximas y Vencidas siempre globales)
   static async getDashboard(organizacion_id, anio, mes) {
     const anioFiltro = anio || new Date().getFullYear();
     const mesFiltro = mes ? parseInt(mes) : null;
 
-    let sqlAplic = `
-      SELECT COUNT(*) AS total FROM historial_vacunas
-      WHERE organizacion_id = ? AND YEAR(fecha_aplicacion) = ?
-    `;
-    const paramsAplic = [organizacion_id, anioFiltro];
+    // 1. Aplicadas (Si hay mes, por mes. Si no hay mes, por año)
+    let sqlAplic = `SELECT COUNT(*) AS total FROM historial_vacunas WHERE organizacion_id = ? AND estado = 'Activa'`;
+    let paramsAplic = [organizacion_id];
+    
+    if (anioFiltro) {
+      sqlAplic += ` AND YEAR(fecha_aplicacion) = ?`;
+      paramsAplic.push(anioFiltro);
+    }
     if (mesFiltro) {
-      sqlAplic += ' AND MONTH(fecha_aplicacion) = ?';
+      sqlAplic += ` AND MONTH(fecha_aplicacion) = ?`;
       paramsAplic.push(mesFiltro);
     }
     const [aplicadas] = await pool.query(sqlAplic, paramsAplic);
 
-    // Usamos ROW_NUMBER para obtener el ÚLTIMO registro por paciente y vacuna
+    // 2. Próximas y Vencidas (GLOBAL - No importa el mes, siempre la dosis más actual)
     const [estados] = await pool.query(`
       WITH UltimosEstados AS (
-        SELECT 
-          fecha_proxima,
-          ROW_NUMBER() OVER(PARTITION BY paciente_id, vacuna_id ORDER BY fecha_aplicacion DESC, id DESC) as rn
+        SELECT fecha_proxima,
+               ROW_NUMBER() OVER(PARTITION BY paciente_id, vacuna_id ORDER BY fecha_aplicacion DESC, id DESC) as rn
         FROM historial_vacunas
-        WHERE organizacion_id = ? AND fecha_proxima IS NOT NULL
+        WHERE organizacion_id = ? AND estado = 'Activa' AND fecha_proxima IS NOT NULL
       )
       SELECT 
         SUM(CASE WHEN fecha_proxima < CURDATE() THEN 1 ELSE 0 END) AS vencidas,
@@ -179,126 +176,116 @@ class HistorialVacuna {
       WHERE rn = 1
     `, [organizacion_id]);
 
-    const vencidas = parseInt(estados[0]?.vencidas || 0);
-    const proximas = parseInt(estados[0]?.proximas || 0);
-
+    // 3. Top vacunas (Depende del mes seleccionado)
     let sqlTop = `
       SELECT v.id, v.nombre, COUNT(h.id) AS total
       FROM historial_vacunas h
       JOIN vacunas v ON h.vacuna_id = v.id
-      WHERE h.organizacion_id = ? AND YEAR(h.fecha_aplicacion) = ?
+      WHERE h.organizacion_id = ? AND h.estado = 'Activa'
     `;
-    const paramsTop = [organizacion_id, anioFiltro];
-    if (mesFiltro) {
-      sqlTop += ' AND MONTH(h.fecha_aplicacion) = ?';
-      paramsTop.push(mesFiltro);
-    }
-    sqlTop += ' GROUP BY v.id, v.nombre ORDER BY total DESC LIMIT 5';
+    const paramsTop = [organizacion_id];
+    if (anioFiltro) { sqlTop += ` AND YEAR(h.fecha_aplicacion) = ?`; paramsTop.push(anioFiltro); }
+    if (mesFiltro) { sqlTop += ` AND MONTH(h.fecha_aplicacion) = ?`; paramsTop.push(mesFiltro); }
+    sqlTop += ` GROUP BY v.id, v.nombre ORDER BY total DESC LIMIT 5`;
+    
     const [topVacunas] = await pool.query(sqlTop, paramsTop);
 
     const [anios] = await pool.query(
-      `SELECT DISTINCT YEAR(fecha_aplicacion) AS anio 
-       FROM historial_vacunas WHERE organizacion_id = ? 
-       ORDER BY anio DESC`,
+      `SELECT DISTINCT YEAR(fecha_aplicacion) AS anio FROM historial_vacunas WHERE organizacion_id = ? ORDER BY anio DESC`,
       [organizacion_id]
     );
 
     return {
       aplicadasMes: aplicadas[0]?.total || 0,
-      proximas,
-      vencidas,
+      proximas: parseInt(estados[0]?.proximas || 0),
+      vencidas: parseInt(estados[0]?.vencidas || 0),
       topVacunas: topVacunas || [],
       aniosDisponibles: anios.length ? anios.map((a) => a.anio) : [new Date().getFullYear()],
     };
   }
 
-  static async vincularFacturaAConsulta(consulta_id, organizacion_id, factura_id) {
-    const [result] = await pool.query(
-      `UPDATE historial_vacunas 
-      SET factura_id = ? 
-      WHERE consulta_id = ? 
-        AND organizacion_id = ? 
-        AND factura_id IS NULL`,
-      [factura_id, consulta_id, organizacion_id]
-    );
-    return result.affectedRows;
-  }
-
-  // Obtener historial global filtrado por mes, año y estado
+  // Historial global: Si hay mes, muestra lo del mes. Si no, muestra el estado más actual global.
   static async findAllGlobal(organizacion_id, anio, mes, filtro = 'todas', page = 1, limit = 10) {
     const offset = (page - 1) * limit;
+    let params = [organizacion_id];
+    let baseSql = '';
 
-    // Base de la consulta que obtiene solo el ÚLTIMO registro por paciente y vacuna
-    let baseSql = `
-      WITH UltimosEstados AS (
-        SELECT h.*, 
-               ROW_NUMBER() OVER(PARTITION BY h.paciente_id, h.vacuna_id ORDER BY h.fecha_aplicacion DESC, h.id DESC) as rn
-        FROM historial_vacunas h
-        WHERE h.organizacion_id = ?
-    `;
-    const params = [organizacion_id];
-
-    if (anio) {
-      baseSql += ' AND YEAR(h.fecha_aplicacion) = ?';
-      params.push(parseInt(anio));
-    }
     if (mes) {
-      baseSql += ' AND MONTH(h.fecha_aplicacion) = ?';
-      params.push(parseInt(mes));
+      // 🔴 MODO MENSUAL: Mostrar TODAS las aplicaciones de ese mes (Para reportes)
+      baseSql = `
+        SELECT h.*, 
+               v.nombre AS vacuna_nombre,
+               p.nombre AS paciente_nombre, p.apellidos AS paciente_apellidos, p.especie,
+               c.nombre AS cliente_nombre, c.telefono_whatsapp,
+               us.nombre AS medico_nombre,
+               DATEDIFF(h.fecha_proxima, CURDATE()) AS dias_restantes,
+               0 AS dias_retraso
+        FROM historial_vacunas h
+        JOIN vacunas v ON h.vacuna_id = v.id
+        JOIN pacientes p ON h.paciente_id = p.id
+        JOIN clientes c ON p.cliente_id = c.id
+        LEFT JOIN medicos m ON h.medico_id = m.id
+        LEFT JOIN usuarios us ON m.usuario_id = us.id
+        WHERE h.organizacion_id = ? AND h.estado = 'Activa'
+          AND YEAR(h.fecha_aplicacion) = ? AND MONTH(h.fecha_aplicacion) = ?
+      `;
+      params.push(parseInt(anio), parseInt(mes));
+    } else {
+      // 🟢 MODO GLOBAL: Mostrar SOLO la última aplicación de cada paciente+vacuna
+      baseSql = `
+        WITH Ranked AS (
+            SELECT h.*, 
+                   v.nombre AS vacuna_nombre,
+                   p.nombre AS paciente_nombre, p.apellidos AS paciente_apellidos, p.especie,
+                   c.nombre AS cliente_nombre, c.telefono_whatsapp,
+                   us.nombre AS medico_nombre,
+                   ROW_NUMBER() OVER(PARTITION BY h.paciente_id, h.vacuna_id ORDER BY h.fecha_aplicacion DESC, h.id DESC) as rn,
+                   LAG(h.fecha_proxima) OVER(PARTITION BY h.paciente_id, h.vacuna_id ORDER BY h.fecha_aplicacion ASC, h.id ASC) as prev_fecha_proxima
+            FROM historial_vacunas h
+            JOIN vacunas v ON h.vacuna_id = v.id
+            JOIN pacientes p ON h.paciente_id = p.id
+            JOIN clientes c ON p.cliente_id = c.id
+            LEFT JOIN medicos m ON h.medico_id = m.id
+            LEFT JOIN usuarios us ON m.usuario_id = us.id
+            WHERE h.organizacion_id = ? AND h.estado = 'Activa'
+        )
+        SELECT *,
+               DATEDIFF(fecha_proxima, CURDATE()) AS dias_restantes,
+               CASE
+                   WHEN fecha_aplicacion > prev_fecha_proxima THEN DATEDIFF(fecha_aplicacion, prev_fecha_proxima)
+                   ELSE 0
+               END AS dias_retraso
+        FROM Ranked
+        WHERE rn = 1
+      `;
+      // Si seleccionó un año en el modo global, filtramos por ese año
+      if (anio) {
+        baseSql = baseSql.replace('WHERE h.organizacion_id = ? AND h.estado = \'Activa\'', 'WHERE h.organizacion_id = ? AND h.estado = \'Activa\' AND YEAR(h.fecha_aplicacion) = ?');
+        params.push(parseInt(anio));
+      }
     }
 
-    baseSql += ` ) SELECT * FROM UltimosEstados WHERE rn = 1`;
-
-    // Aplicamos el filtro de estado
     let filtroSql = '';
     if (filtro === 'vencidas') {
       filtroSql = ' AND fecha_proxima < CURDATE()';
     } else if (filtro === 'proximas') {
       filtroSql = ' AND fecha_proxima >= CURDATE() AND fecha_proxima <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)';
-    } else if (filtro === 'aplicadas') {
-      filtroSql = ' AND (fecha_proxima IS NULL OR fecha_proxima >= CURDATE())';
     }
 
-    // Total de registros para paginación
-    const [countResult] = await pool.query(
-      `SELECT COUNT(*) AS total FROM (${baseSql} ${filtroSql}) AS sub`, 
-      params
-    );
-    const total = countResult[0].total;
+    // Conteo total
+    const countSql = `SELECT COUNT(*) AS total FROM (${baseSql} ${filtroSql}) AS sub`;
+    const [countResult] = await pool.query(countSql, params);
 
-    // Consulta final con JOINs
-    const sqlData = `
-      SELECT 
-        u.id, u.paciente_id, u.fecha_aplicacion, u.fecha_proxima, u.lote, u.observaciones,
-        v.id AS vacuna_id, v.nombre AS vacuna_nombre,
-        p.nombre AS paciente_nombre, p.apellidos AS paciente_apellidos, p.especie,
-        c.nombre AS cliente_nombre, c.telefono_whatsapp,
-        us.nombre AS medico_nombre,
-        DATEDIFF(u.fecha_proxima, CURDATE()) AS dias_restantes
-      FROM (${baseSql} ${filtroSql}) AS u
-      JOIN vacunas v ON u.vacuna_id = v.id
-      JOIN pacientes p ON u.paciente_id = p.id
-      JOIN clientes c ON p.cliente_id = c.id
-      LEFT JOIN medicos m ON u.medico_id = m.id
-      LEFT JOIN usuarios us ON m.usuario_id = us.id
-      ORDER BY u.fecha_proxima ASC, u.fecha_aplicacion DESC
-      LIMIT ? OFFSET ?
-    `;
-
+    // Data paginada
+    const dataSql = `${baseSql} ${filtroSql} ORDER BY fecha_proxima ASC, fecha_aplicacion DESC LIMIT ? OFFSET ?`;
     const dataParams = [...params, limit, offset];
-    const [rows] = await pool.query(sqlData, dataParams);
+    const [rows] = await pool.query(dataSql, dataParams);
 
     return {
       data: rows,
-      paginacion: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit)
-      }
+      paginacion: { total: countResult[0].total, page, limit, totalPages: Math.ceil(countResult[0].total / limit) }
     };
   }
-
 }
 
 module.exports = HistorialVacuna;

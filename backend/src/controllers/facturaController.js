@@ -401,6 +401,64 @@ exports.editarFactura = async (req, res) => {
       return res.status(400).json({ message: 'No se puede editar una factura pagada o anulada' });
     }
 
+    // ============================================================
+    // 🔒 PROTECCIÓN: No permitir eliminar detalles de exámenes/vacunas
+    //    vinculados a la consulta de esta factura.
+    // ============================================================
+    const [consultaVinculada] = await connection.query(
+      'SELECT id FROM consultas WHERE factura_id = ? AND organizacion_id = ?',
+      [id, organizacion_id]
+    );
+
+    if (consultaVinculada.length > 0) {
+      const consultaId = consultaVinculada[0].id;
+
+      const [examenesProtegidos] = await connection.query(
+        `SELECT e.producto_id, e.nombre
+         FROM solicitudes_examen s
+         JOIN examenes e ON s.examen_id = e.id
+         WHERE s.consulta_id = ? AND s.organizacion_id = ?
+           AND s.estado <> 'Cancelado' AND e.producto_id IS NOT NULL`,
+        [consultaId, organizacion_id]
+      );
+
+      const [vacunasProtegidas] = await connection.query(
+        `SELECT v.producto_id, v.nombre
+         FROM historial_vacunas h
+         JOIN vacunas v ON h.vacuna_id = v.id
+         WHERE h.consulta_id = ? AND h.organizacion_id = ?
+           AND v.producto_id IS NOT NULL`,
+        [consultaId, organizacion_id]
+      );
+
+      const productosNuevos = new Set(
+        (detalles || [])
+          .filter((d) => d.producto_id)
+          .map((d) => Number(d.producto_id))
+      );
+
+      const faltantes = [];
+      for (const ex of examenesProtegidos) {
+        if (!productosNuevos.has(Number(ex.producto_id))) {
+          faltantes.push(`Examen "${ex.nombre}"`);
+        }
+      }
+      for (const va of vacunasProtegidas) {
+        if (!productosNuevos.has(Number(va.producto_id))) {
+          faltantes.push(`Vacuna "${va.nombre}"`);
+        }
+      }
+
+      if (faltantes.length > 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          message:
+            `No se puede eliminar de la factura: ${faltantes.join(', ')}. ` +
+            `Anule el examen desde "Exámenes" o elimine la vacuna desde la "Cartilla" primero.`,
+        });
+      }
+    }
+
     // Recalcular totales
     const { subtotal_sumas, iva_13, iva_0, iva_no_sujeto, total_pagar } = calcularTotalesFactura(
       detalles || [],

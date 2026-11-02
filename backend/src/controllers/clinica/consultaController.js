@@ -10,13 +10,10 @@ const { pool } = require('../../config/db');
 exports.listar = async (req, res) => {
   try {
     const organizacion_id = req.organizacion_id;
-    const { paciente_id, medico_id, anio, mes, search, fecha_inicio, fecha_fin } = req.query;
+    const { paciente_id, medico_id, anio, mes, search, page, limit } = req.query;
 
-    const consultas = await Consulta.findAll(organizacion_id, {
-      paciente_id, medico_id, anio, mes, search, fecha_inicio, fecha_fin,
-    });
-
-    res.json(consultas);
+    const result = await Consulta.findAll(organizacion_id, { paciente_id, medico_id, anio, mes, search }, page, limit);
+    res.json(result);
   } catch (error) {
     console.error('Error al listar consultas:', error);
     res.status(500).json({ message: 'Error al listar consultas' });
@@ -114,21 +111,16 @@ exports.facturar = async (req, res) => {
 
     const { id } = req.params;
     const organizacion_id = req.organizacion_id;
-    const usuario_id = req.usuario_id; // viene del authMiddleware
+    const usuario_id = req.usuario_id;
 
-    // ============================================================
     // 1. VALIDAR QUE EXISTA LA CONSULTA
-    // ============================================================
     const consulta = await Consulta.findById(id, organizacion_id);
     if (!consulta) {
       await connection.rollback();
       return res.status(404).json({ message: 'Consulta no encontrada' });
     }
 
-    // ============================================================
-    // 2. VALIDAR QUE LA CONSULTA NO ESTÉ YA FACTURADA
-    //    (a menos que su factura esté anulada)
-    // ============================================================
+    // 2. VALIDAR QUE NO ESTÉ YA FACTURADA (a menos que su factura esté anulada)
     if (consulta.factura_id) {
       const [facturaExistente] = await connection.query(
         'SELECT id, estado FROM facturas WHERE id = ? AND organizacion_id = ?',
@@ -142,9 +134,7 @@ exports.facturar = async (req, res) => {
       }
     }
 
-    // ============================================================
-    // 3. OBTENER EL PACIENTE Y SU CLIENTE ASOCIADO
-    // ============================================================
+    // 3. OBTENER EL PACIENTE Y SU CLIENTE
     const paciente = await Paciente.findById(consulta.paciente_id, organizacion_id);
     if (!paciente) {
       await connection.rollback();
@@ -159,9 +149,63 @@ exports.facturar = async (req, res) => {
     }
 
     // ============================================================
-    // 4. 🔐 VALIDACIÓN DE PRECIOS DESDE LA BD
-    //    No confiamos en los precios del frontend. Los recalculamos.
+    // 3.5. VALIDACIÓN CRÍTICA:
+    //      Todos los exámenes internos NO cancelados y todas las
+    //      vacunas pendientes deben venir en "servicios".
+    //      Si el usuario los quitó desde el modal, se rechaza.
     // ============================================================
+    const [examenesVinculados] = await connection.query(
+      `SELECT s.id, e.nombre AS nombre, e.producto_id
+       FROM solicitudes_examen s
+       JOIN examenes e ON s.examen_id = e.id
+       WHERE s.consulta_id = ?
+         AND s.organizacion_id = ?
+         AND s.tipo_ejecucion = 'Interno'
+         AND s.estado <> 'Cancelado'
+         AND s.factura_id IS NULL
+         AND e.producto_id IS NOT NULL`,
+      [id, organizacion_id]
+    );
+
+    const [vacunasVinculadas] = await connection.query(
+      `SELECT h.id, v.nombre AS nombre, v.producto_id
+       FROM historial_vacunas h
+       JOIN vacunas v ON h.vacuna_id = v.id
+       WHERE h.consulta_id = ?
+         AND h.organizacion_id = ?
+         AND h.factura_id IS NULL
+         AND v.producto_id IS NOT NULL`,
+      [id, organizacion_id]
+    );
+
+    const productosEnviados = new Set(
+      servicios
+        .filter((s) => s.producto_id)
+        .map((s) => Number(s.producto_id))
+    );
+
+    const faltantes = [];
+    for (const ex of examenesVinculados) {
+      if (!productosEnviados.has(Number(ex.producto_id))) {
+        faltantes.push(`Examen "${ex.nombre}"`);
+      }
+    }
+    for (const va of vacunasVinculadas) {
+      if (!productosEnviados.has(Number(va.producto_id))) {
+        faltantes.push(`Vacuna "${va.nombre}"`);
+      }
+    }
+
+    if (faltantes.length > 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        message:
+          `No se puede facturar: faltan ítems vinculados a la consulta (${faltantes.join(', ')}). ` +
+          `Si desea excluirlos, primero anúlelos desde su módulo correspondiente (Exámenes o Cartilla de Vacunas).`,
+      });
+    }
+
+    // 4. VALIDACIÓN DE PRECIOS DESDE LA BD
     const serviciosValidados = [];
     let subtotal = 0;
     let iva13 = 0;
@@ -187,19 +231,16 @@ exports.facturar = async (req, res) => {
       const subtotalItem = cantidad * precioReal;
       const tipoVenta = s.tipo_venta || 'Gravado';
 
-      // Log de control (útil para auditoría si alguien manipula precios)
       if (Math.abs((s.precio_unitario || 0) - precioReal) > 0.01) {
         console.warn(
-          `⚠️ Precio manipulado detectado: producto ${producto.id} ` +
+          `Precio manipulado detectado: producto ${producto.id} ` +
           `- enviado: $${s.precio_unitario}, real: $${precioReal}. ` +
           `Se usará el precio real.`
         );
       }
 
       subtotal += subtotalItem;
-      if (tipoVenta === 'Gravado') {
-        iva13 += subtotalItem * 0.13;
-      }
+      if (tipoVenta === 'Gravado') iva13 += subtotalItem * 0.13;
 
       serviciosValidados.push({
         producto_id: producto.id,
@@ -214,18 +255,14 @@ exports.facturar = async (req, res) => {
 
     const total = subtotal + iva13;
 
-    // ============================================================
     // 5. GENERAR NÚMERO CORRELATIVO
-    // ============================================================
     const [count] = await connection.query(
       'SELECT COUNT(*) AS total FROM facturas WHERE organizacion_id = ?',
       [organizacion_id]
     );
     const numero = `FAC-${String(count[0].total + 1).padStart(6, '0')}`;
 
-    // ============================================================
     // 6. INSERTAR FACTURA
-    // ============================================================
     const [facturaResult] = await connection.query(
       `INSERT INTO facturas
        (organizacion_id, usuario_id, cliente_id, tipo_documento, numero_correlativo,
@@ -248,19 +285,14 @@ exports.facturar = async (req, res) => {
 
     const facturaId = facturaResult.insertId;
 
-    // ============================================================
     // 7. VINCULAR LA FACTURA A LA CONSULTA
-    // ============================================================
     await connection.query(
       `UPDATE consultas SET factura_id = ? WHERE id = ? AND organizacion_id = ?`,
       [facturaId, id, organizacion_id]
     );
 
-    // ============================================================
-    // 8. ✅ VINCULAR LA FACTURA A LAS VACUNAS APLICADAS EN LA CONSULTA
-    //    (solo las que aún no tienen factura)
-    // ============================================================
-    const [vacunasVinculadas] = await connection.query(
+    // 8. VINCULAR VACUNAS PENDIENTES
+    const [vacunasVinculadasUpdate] = await connection.query(
       `UPDATE historial_vacunas 
        SET factura_id = ? 
        WHERE consulta_id = ? 
@@ -269,35 +301,19 @@ exports.facturar = async (req, res) => {
       [facturaId, id, organizacion_id]
     );
 
-    if (vacunasVinculadas.affectedRows > 0) {
-      console.log(
-        `💉 Vinculadas ${vacunasVinculadas.affectedRows} vacuna(s) a la factura ${numero}`
-      );
-    }
-
-    // ============================================================
-    // 9. ✅ VINCULAR LA FACTURA A LAS SOLICITUDES DE EXAMEN INTERNAS
-    //    (solo las que aún no tienen factura)
-    // ============================================================
-    const [examenesVinculados] = await connection.query(
+    // 9. VINCULAR EXÁMENES PENDIENTES (solo no cancelados)
+    const [examenesVinculadosUpdate] = await connection.query(
       `UPDATE solicitudes_examen 
        SET factura_id = ? 
        WHERE consulta_id = ? 
          AND organizacion_id = ? 
          AND tipo_ejecucion = 'Interno'
+         AND estado <> 'Cancelado'
          AND factura_id IS NULL`,
       [facturaId, id, organizacion_id]
     );
 
-    if (examenesVinculados.affectedRows > 0) {
-      console.log(
-        `🔬 Vinculados ${examenesVinculados.affectedRows} examen(es) a la factura ${numero}`
-      );
-    }
-
-    // ============================================================
-    // 10. INSERTAR DETALLES DE LA FACTURA (usando precios validados)
-    // ============================================================
+    // 10. INSERTAR DETALLES
     for (const s of serviciosValidados) {
       await connection.query(
         `INSERT INTO detalles_factura
@@ -315,9 +331,7 @@ exports.facturar = async (req, res) => {
       );
     }
 
-    // ============================================================
     // 11. COMMIT
-    // ============================================================
     await connection.commit();
 
     res.status(201).json({
@@ -327,8 +341,8 @@ exports.facturar = async (req, res) => {
       subtotal: parseFloat(subtotal.toFixed(2)),
       iva: parseFloat(iva13.toFixed(2)),
       total: parseFloat(total.toFixed(2)),
-      vacunas_vinculadas: vacunasVinculadas.affectedRows || 0,
-      examenes_vinculados: examenesVinculados.affectedRows || 0,
+      vacunas_vinculadas: vacunasVinculadasUpdate.affectedRows || 0,
+      examenes_vinculados: examenesVinculadosUpdate.affectedRows || 0,
     });
   } catch (error) {
     await connection.rollback();
@@ -490,7 +504,7 @@ exports.getExamenesInternos = async (req, res) => {
        WHERE s.consulta_id = ? 
          AND s.organizacion_id = ?
          AND s.tipo_ejecucion = 'Interno'
-         AND e.producto_id IS NOT NULL`,
+         AND s.estado <> 'Cancelado'`,
       [id, organizacion_id]
     );
 
